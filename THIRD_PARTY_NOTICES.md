@@ -2,7 +2,7 @@
 
 ## Rail Beetle whistle
 
-- Asset: `assets/rail_beetle/sounds/whistle.ogg`
+- Asset: `assets/better_rail_beetle/sounds/whistle.ogg`
 - Source: [Parovoz sound.ogg](https://commons.wikimedia.org/wiki/File:Parovoz_sound.ogg)
 - Original author: Alex Alex Lep
 - Original date: 2008

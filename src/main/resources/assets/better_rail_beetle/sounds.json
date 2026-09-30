@@ -1,0 +1,11 @@
+{
+  "whistle": {
+    "subtitle": "subtitles.better_rail_beetle.whistle",
+    "sounds": [
+      {
+        "name": "better_rail_beetle:whistle",
+        "stream": false
+      }
+    ]
+  }
+}

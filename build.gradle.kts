@@ -58,13 +58,13 @@ minecraft {
         create("visualServer") {
             parent(baseServer)
             workingDirectory(project.file("run-visual-server"))
-            mods { create("rail_beetle_visual_harness") { source(visualHarness) } }
+            mods { create("better_rail_beetle_visual_harness") { source(visualHarness) } }
         }
         create("visualClient") {
             parent(baseClient)
             workingDirectory(project.file("run-visual-client"))
             args("--quickPlayMultiplayer", "127.0.0.1:25565", "--width", "1280", "--height", "720")
-            mods { create("rail_beetle_visual_harness") { source(visualHarness) } }
+            mods { create("better_rail_beetle_visual_harness") { source(visualHarness) } }
         }
     }
 }

@@ -1,4 +1,4 @@
-# Rail Beetle
+# Better Rail Beetle
 
 Rail Beetle is a server-authoritative Forge 1.20.1 mod. At the end of an
 existing railway, a Beetle surveys nearby cave floors once per second, presents
