@@ -724,13 +724,36 @@ public final class RailBeetleGameTests {
         helper.getLevel().addFreshEntity(beetle);
         net.minecraft.world.entity.player.Player player = helper.makeMockPlayer();
         AtomicInteger progressBeforeRollback = new AtomicInteger();
+        AtomicBoolean rolledBack = new AtomicBoolean();
+
+        // Proposals are published incrementally while planning deepens, so the rollback has to snap
+        // to the exact tick the cursor first reaches the mid-route step of a fully published
+        // corridor route. Triggering any later can record progress at the route's final steps, where
+        // a finished route resets the cursor to 0 and makes recovery unreachable.
+        helper.onEachTick(() -> {
+            if (rolledBack.get()) return;
+            RouteProposal route = beetle.activeRoute();
+            if (route == null) return;
+            int progress = beetle.activeStep();
+            if (progress < 3 || progress + 2 > route.steps().size()) return;
+            int rewindStep = Math.max(0, progress - 2);
+            BlockPos previous = route.steps().get(rewindStep).railPos();
+            progressBeforeRollback.set(progress);
+            rolledBack.set(true);
+            beetle.setPos(previous.getX() + 0.5, previous.getY() + 0.0625, previous.getZ() + 0.5);
+            beetle.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+        });
 
         helper.startSequence()
-                .thenWaitUntil(() -> helper.assertTrue(!beetle.proposals().isEmpty(),
-                        "Beetle must plan the straight rollback test corridor; mode=" + beetle.mode()
-                                + ", fuel=" + beetle.fuelTicks() + ", pos=" + beetle.position()))
+                .thenWaitUntil(() -> helper.assertTrue(beetle.proposals().stream()
+                                .anyMatch(candidate -> candidate.steps().size() >= 6),
+                        "Beetle must publish the full straight rollback test corridor; mode=" + beetle.mode()
+                                + ", fuel=" + beetle.fuelTicks() + ", pos=" + beetle.position()
+                                + ", steps=" + beetle.proposals().stream().map(route -> route.steps().size()).toList()))
                 .thenExecute(() -> {
-                    RouteProposal route = beetle.proposals().get(0);
+                    RouteProposal route = beetle.proposals().stream()
+                            .filter(candidate -> candidate.steps().size() >= 6).findFirst().orElse(null);
+                    helper.assertTrue(route != null, "rollback test requires a fully published corridor route");
                     BlockPos first = route.steps().get(0).railPos();
                     player.setPos(beetle.getX(), beetle.getY() + 1.0, beetle.getZ() - 2.0);
                     player.lookAt(EntityAnchorArgument.Anchor.EYES,
@@ -739,22 +762,19 @@ public final class RailBeetleGameTests {
                     helper.assertTrue(beetle.mode() == BeetleMode.DEPARTING,
                             "selected rollback route must enter its departure phase");
                 })
-                .thenWaitUntil(() -> helper.assertTrue(beetle.activeStep() >= 3,
-                        "Beetle must advance far enough to exercise route rollback; progress=" + beetle.activeStep()))
-                .thenExecute(() -> {
-                    progressBeforeRollback.set(beetle.activeStep());
-                    RouteProposal route = beetle.activeRoute();
-                    helper.assertTrue(route != null, "rollback test requires an active route");
-                    int rewindStep = Math.max(0, progressBeforeRollback.get() - 2);
-                    BlockPos previous = route.steps().get(rewindStep).railPos();
-                    beetle.setPos(previous.getX() + 0.5, previous.getY() + 0.0625, previous.getZ() + 0.5);
-                    beetle.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
-                })
+                .thenWaitUntil(() -> helper.assertTrue(rolledBack.get(),
+                        "Beetle must advance far enough to exercise route rollback; progress=" + beetle.activeStep()
+                                + ", mode=" + beetle.mode()
+                                + ", route=" + (beetle.activeRoute() == null ? "none"
+                                        : beetle.activeRoute().steps().size())))
                 .thenWaitUntil(() -> helper.assertTrue(beetle.activeStep() < progressBeforeRollback.get(),
                         "route cursor must rewind when the Beetle crosses onto an earlier route rail; progress="
                                 + beetle.activeStep() + ", before=" + progressBeforeRollback.get()))
                 .thenWaitUntil(() -> helper.assertTrue(beetle.activeStep() > progressBeforeRollback.get(),
-                        "automatic Forward must recover and resume route progress; progress=" + beetle.activeStep()))
+                        "automatic Forward must recover and resume route progress; progress=" + beetle.activeStep()
+                                + ", before=" + progressBeforeRollback.get() + ", mode=" + beetle.mode()
+                                + ", route=" + (beetle.activeRoute() == null ? "none"
+                                        : beetle.activeRoute().steps().size())))
                 .thenExecute(() -> helper.assertTrue(beetle.noseHeading() == Direction.SOUTH,
                         "automatic rollback must not flip the route-defined forward heading"))
                 .thenSucceed();
