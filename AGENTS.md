@@ -1,25 +1,13 @@
-# AGENTS.md
+# Better Rail Beetle
 
-## Project identity
+Forge 1.20.1 / Java 17; mod ID `better_rail_beetle`;
+base package `com.bettercontent.betterrailbeetle`. Optional Create 6.0.8 integration.
+This clean implementation must not import, inspect, migrate or add compatibility for earlier
+Rail Crawler implementations/artifacts.
+Deterministic/staged JAR: `./gradlew verifyFast`.
+Runtime: `./gradlew verifyFull` (Create, Alex's Caves and YUNG's Better Caves loaded).
+Stage: `./gradlew stageRuntimeJar`, `build/libs/better-rail-beetle-<version>.jar`.
 
-- Repository and artifact: `better-rail-beetle`
-- Mod ID and namespace: `better_rail_beetle`
-- Base package: `com.bettercontent.betterrailbeetle`
-- Java: 17
-- Minecraft/Forge: 1.20.1 / 47.4.13
-- Optional runtime integration: Create 6.0.8
-
-This is a clean implementation. Do not import, inspect, migrate, or add compatibility
-for any earlier Rail Crawler implementation or artifact.
-
-## Validation
-
-- Run `./gradlew verifyFast` for deterministic tests and a staged runtime JAR.
-- Run `./gradlew verifyFull` for Forge GameTests with Create, Alex's Caves, and
-  YUNG's Better Caves loaded.
-- Do not commit generated Gradle state, build output, runtime worlds, logs, or IDE files.
-
-## Commit discipline
-
-Commit coherent changes only after required validation passes. Push only when a
-canonical remote exists.
+Read [shared workspace policy](../../better-content-modpack/docs/policies/workspace.md)
+and its linked testing/disposal policies. Docs-only changes use the shared document check
+and `git diff --check`, not unrelated runtime builds.

@@ -1,5 +1,11 @@
 # Better Rail Beetle
 
+## Scope and authority
+
+This repository owns its mod-specific behavior and authoring inputs. Read [local instructions](AGENTS.md)
+and the [shared documentation/policy index](../../better-content-modpack/docs/README.md).
+
+
 Rail Beetle is a server-authoritative Forge 1.20.1 mod. At the end of an
 existing railway, a Beetle surveys nearby cave floors once per second, presents
 three core terrain-following rail routes plus up to four more when their
