@@ -149,6 +149,7 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
     private final Set<BlockPos> placedRouteRails = new HashSet<>();
 
     private BeetleMode mode = BeetleMode.STOPPED;
+    private boolean discoveryParked;
     private BeetleSpeed speedTier = BeetleSpeed.NORMAL;
     private Direction noseHeading = Direction.NORTH;
     private boolean headingInitialized;
@@ -312,6 +313,15 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
         }
     }
 
+    /** Found consists do no surveying or fuel work until a player opens the Beetle. */
+    public void parkForDiscovery(Direction heading) {
+        setInitialHeading(heading);
+        headingInitialized = true;
+        discoveryParked = true;
+        mode = BeetleMode.STOPPED;
+        applyAutomaticBrake(true);
+    }
+
     @Override
     public void tick() {
         if (!level().isClientSide) serverPreTick();
@@ -331,7 +341,7 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
         preTickRail = rail == null ? null : rail.immutable();
         preTickPosition = position();
         initializeHeading(rail);
-        normalizeState(rail);
+        if (!discoveryParked) normalizeState(rail);
         boolean brake = shouldBrake();
         applyAutomaticBrake(brake);
         tickSearchlight();
@@ -908,6 +918,7 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
         boolean remote = !canNearbyPlayerControl(player);
         if (remote && !canRemoteControl(player)) return;
         if (remote && action != BeetleControl.STOP && !consumeWork(WorkAction.REMOTE, 1)) return;
+        discoveryParked = false;
         switch (action) {
             case TOGGLE_HAND_BRAKE -> {
                 forcedBrake = !forcedBrake;
@@ -1315,6 +1326,7 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
 
     @Override
     public InteractionResult interact(Player player, InteractionHand hand) {
+        if (!level().isClientSide) discoveryParked = false;
         ItemStack held = player.getItemInHand(hand);
         if (!level().isClientSide && player.isShiftKeyDown() && held.isEmpty()
                 && canConfigureMachinery() && engineKind() == EngineKind.SOUL && transferGoetySoul(player)) {
@@ -1442,6 +1454,7 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
         tag.put("Inventory", inventory.serializeNBT());
         tag.put("Engine", engine.serializeNBT());
         tag.put("Modules", modules.serializeNBT());
+        tag.putBoolean("DiscoveryParked", discoveryParked);
         tag.putBoolean("ForcedBrake", forcedBrake);
         tag.putBoolean("Neutral", mode == BeetleMode.NEUTRAL);
         tag.putInt("FuelTicks", fuelTicks);
@@ -1463,6 +1476,7 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
         inventory.deserializeNBT(tag.getCompound("Inventory"));
         engine.deserializeNBT(tag.getCompound("Engine"));
         modules.deserializeNBT(tag.getCompound("Modules"));
+        discoveryParked = tag.getBoolean("DiscoveryParked");
         forcedBrake = tag.getBoolean("ForcedBrake");
         fuelTicks = Math.max(0, tag.getInt("FuelTicks"));
         proposalGeneration = tag.getLong("ProposalGeneration");

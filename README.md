@@ -22,6 +22,40 @@ and six working tool assemblies form the Beetle silhouette. Installed modules
 and the selected engine alter visible machinery. Create and every alternate
 power mod are optional.
 
+## Underground discoveries
+
+With Create loaded, new Overworld terrain can contain a cave siding: one baseline
+Beetle, an empty passenger cart, and a chest minecart already coupled in that order.
+The Beetle faces the forward rail terminus. Its working inventory contains 64 rails,
+64 cobblestone and 16 coal; the chest carries the same quantities as reserves.
+Freight does not automatically feed the working inventory. No advanced modules or
+alternate engine are supplied.
+
+The consist stays braked and does no surveying until a player opens the Beetle (or
+issues an authorized control). This parked state survives saving. Open it, inspect
+the supplies, select a projected route with `G`, and ride in the passenger cart.
+
+`data/better_rail_beetle/worldgen/structure_set/cave_sidings.json` controls candidate
+spacing (12 chunks, separation 5); the structure's biome tag limits it to the
+Overworld. Candidates scan underground dry cave floors from at most Y=64 down to
+Y=-48, at least 16 blocks beneath the local surface. Actual sites require a clear
+3-wide, 13-long, 3-high footprint, ground within three blocks, and an unobstructed
+forward departure runway. No cave is excavated, flooded or deep-ravine sites are
+rejected, and the entire site fits in one chunk. Unsuitable candidates place
+nothing, so structure records/locate results are candidates, not a guarantee of a
+train. Discovery density in natural pack terrain still needs field evaluation.
+
+A cobblestone-looking foundation block initializes the vehicles on the server,
+using deterministic per-site UUIDs and ordinary Create couplings. It records
+completion permanently, never restocks existing carts, and never replaces a
+previously spawned missing cart. Initialization has bounded retries, loads no
+extra chunks, and leaves player-disturbed sites alone. Completed sites remain
+completed after the vehicles leave. This is not transactional recovery from
+arbitrary disk corruption or independently rolled-back chunk/entity files.
+
+Existing chest-item starter packages remain a separate acquisition route. New
+worldgen does not retrofit already-generated chunks.
+
 ## Use
 
 - Place the Beetle on a rail. Its amber front lamp shows the persistent forward
@@ -82,6 +116,13 @@ Validation:
 ./gradlew verifyFast
 ./gradlew verifyFull
 ```
+
+`verifyFull` runs the native GameTests, including all four discovery orientations,
+blocked/flooded exit rejection, supplied coupled departure, parked-state saving,
+and no replacement after removal. Its fresh-world preparation moves previous
+`run-gametest/world` and `logs` into `run-gametest-history/<timestamp>/` rather than
+deleting them. These isolated tests do not establish natural-terrain frequency or
+visual acceptance in the full pack.
 
 ## Minimal visual harness
 

@@ -1,3 +1,6 @@
+import java.time.Instant
+import java.nio.file.Files
+
 plugins {
     idea
     `java-library`
@@ -134,9 +137,18 @@ val stageRuntimeJar by tasks.registering(Copy::class) {
     rename { "${base.archivesName.get()}-$modVersion.jar" }
 }
 
-val cleanGameTestWorld by tasks.registering(Delete::class) {
-    delete(layout.projectDirectory.dir("run-gametest/world"))
-    delete(layout.projectDirectory.dir("run-gametest/logs"))
+// Fresh fixtures without deleting previous worlds or diagnostic evidence.
+val cleanGameTestWorld by tasks.registering {
+    doLast {
+        val retained = layout.projectDirectory.dir("run-gametest-history/${Instant.now().toEpochMilli()}").asFile
+        for (name in listOf("world", "logs")) {
+            val previous = layout.projectDirectory.dir("run-gametest/$name").asFile
+            if (previous.exists()) {
+                retained.mkdirs()
+                Files.move(previous.toPath(), retained.resolve(name).toPath())
+            }
+        }
+    }
 }
 val syncGameTestStructures by tasks.registering(Sync::class) {
     from(layout.projectDirectory.dir("src/main/resources/gameteststructures"))

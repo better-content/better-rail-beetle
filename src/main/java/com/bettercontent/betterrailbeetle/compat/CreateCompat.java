@@ -33,8 +33,23 @@ public final class CreateCompat {
                 && Loaded.isInSameConsist(first, cart);
     }
 
+    /** Idempotent creation of an ordinary Create coupling; never invents a second link. */
+    public static boolean ensureCoupled(AbstractMinecart first, AbstractMinecart second) {
+        return ModList.get().isLoaded("create") && Loaded.ensureCoupled(first, second);
+    }
+
     private static final class Loaded {
         private Loaded() {}
+
+        private static boolean ensureCoupled(AbstractMinecart first, AbstractMinecart second) {
+            var controller = first.getCapability(com.simibubi.create.content.contraptions.minecart.capability.CapabilityMinecartController.MINECART_CONTROLLER_CAPABILITY).orElse(null);
+            if (controller == null) return false;
+            for (boolean side : new boolean[]{false, true}) {
+                if (second.getUUID().equals(controller.getCoupledCart(side))) return true;
+            }
+            return com.simibubi.create.content.contraptions.minecart.CouplingHandler.tryToCoupleCarts(
+                    null, first.level(), first.getId(), second.getId());
+        }
 
         private static void setExternallyStalled(AbstractMinecart cart, boolean stalled) {
             cart.getCapability(com.simibubi.create.content.contraptions.minecart.capability.CapabilityMinecartController

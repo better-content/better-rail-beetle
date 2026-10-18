@@ -16,6 +16,7 @@ public final class RailBeetleMod {
     public RailBeetleMod() {
         IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
         RailBeetleRegistries.register(modBus);
+        com.bettercontent.betterrailbeetle.worldgen.SidingWorldgen.register(modBus);
         modBus.addListener(this::creativeTab);
         ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, RailBeetleConfig.SERVER_SPEC);
         RailBeetleNetwork.register();

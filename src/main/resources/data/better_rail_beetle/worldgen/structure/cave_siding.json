@@ -1,0 +1,7 @@
+{
+  "type": "better_rail_beetle:cave_siding",
+  "biomes": "#better_rail_beetle:has_structure/cave_siding",
+  "step": "underground_structures",
+  "spawn_overrides": {},
+  "terrain_adaptation": "none"
+}
