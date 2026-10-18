@@ -35,15 +35,22 @@ The consist stays braked and does no surveying until a player opens the Beetle (
 issues an authorized control). This parked state survives saving. Open it, inspect
 the supplies, select a projected route with `G`, and ride in the passenger cart.
 
-`data/better_rail_beetle/worldgen/structure_set/cave_sidings.json` controls candidate
-spacing (12 chunks, separation 5); the structure's biome tag limits it to the
-Overworld. Candidates scan underground dry cave floors from at most Y=64 down to
-Y=-48, at least 16 blocks beneath the local surface. Actual sites require a clear
-3-wide, 13-long, 3-high footprint, ground within three blocks, and an unobstructed
-forward departure runway. No cave is excavated, flooded or deep-ravine sites are
-rejected, and the entire site fits in one chunk. Unsuitable candidates place
-nothing, so structure records/locate results are candidates, not a guarantee of a
-train. Discovery density in natural pack terrain still needs field evaluation.
+Discoveries use post-carving cave-floor feature placement, similar to Artifacts'
+underground campsites, rather than a structure-candidate grid.
+`data/better_rail_beetle/worldgen/placed_feature/cave_siding.json` controls 16 attempts
+per chunk: random X/Z and a random height from Y=-48 to Y=64, then a downward scan
+through air for solid ground within eight blocks and an offset onto the floor.
+The Overworld biome modifier adds this feature at `underground_decoration`.
+Each floor position tries four orientations and must remain at least 16 blocks
+beneath the local surface. Actual sites require a clear 3-wide, 13-long, 3-high
+footprint, ground within three blocks, and an unobstructed forward departure runway.
+No cave is excavated; flooded or deep-ravine sites are rejected, and the entire
+site fits in one chunk. At most one siding is placed per chunk. Failed attempts
+leave no structure starts, and new discoveries are not `/locate structure` targets.
+Legacy structure/piece registrations and the structure definition remain readable
+for existing saves, but no new legacy starts are generated. Old saved empty
+candidate records are not repaired or erased. Discovery density in natural pack
+terrain still needs field evaluation; 16 attempts does not mean 16 discoveries.
 
 A cobblestone-looking foundation block initializes the vehicles on the server,
 using deterministic per-site UUIDs and ordinary Create couplings. It records
@@ -119,8 +126,10 @@ Validation:
 
 `verifyFull` runs the native GameTests, including all four discovery orientations,
 blocked/flooded exit rejection, supplied coupled departure, parked-state saving,
-and no replacement after removal. Its fresh-world preparation moves previous
-`run-gametest/world` and `logs` into `run-gametest-history/<timestamp>/` rather than
+and no replacement after removal. A production placed-feature test searches an
+authored off-centre cave pocket, checks single-site placement and preserves a solid
+centre column. This is not a natural-terrain frequency test. Its fresh-world
+preparation moves previous `run-gametest/world` and `logs` into `run-gametest-history/<timestamp>/` rather than
 deleting them. These isolated tests do not establish natural-terrain frequency or
 visual acceptance in the full pack.
 

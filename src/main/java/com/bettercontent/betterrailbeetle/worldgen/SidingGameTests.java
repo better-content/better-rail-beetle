@@ -28,6 +28,53 @@ public final class SidingGameTests {
     @GameTest(templateNamespace = RailBeetleMod.MOD_ID, template = "empty", timeoutTicks = 300)
     public static void west(GameTestHelper helper) { verify(helper, Direction.WEST); }
 
+    @GameTest(templateNamespace = RailBeetleMod.MOD_ID, template = "empty", timeoutTicks = 100)
+    public static void caveFloorFeature(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var chunk = new net.minecraft.world.level.ChunkPos(helper.absolutePos(new BlockPos(8, 0, 8)));
+        // An authored underground pocket away from the centre column (which stays solid).
+        // This tests the production placement pipeline, not natural-terrain frequency.
+        for (int x = 0; x < 16; x++) for (int z = 0; z < 16; z++) {
+            for (int y = -3; y <= 20; y++) {
+                boolean cave = z >= 1 && z <= 5 && y >= 0 && y <= 4;
+                level.setBlock(new BlockPos(chunk.getMinBlockX()+x, y, chunk.getMinBlockZ()+z),
+                        (cave ? Blocks.AIR : Blocks.STONE).defaultBlockState(), 2);
+            }
+        }
+        var placed = level.registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.PLACED_FEATURE)
+                .get(new net.minecraft.resources.ResourceLocation(RailBeetleMod.MOD_ID, "cave_siding"));
+        helper.assertTrue(placed != null, "Production siding placed feature must load");
+        var generator = level.getChunkSource().getGenerator();
+        var feature = SidingWorldgen.FEATURE.get();
+        var config = net.minecraft.world.level.levelgen.feature.configurations.NoneFeatureConfiguration.INSTANCE;
+        var random = net.minecraft.util.RandomSource.create(123);
+        BlockPos centre = new BlockPos(chunk.getMinBlockX()+8, 0, chunk.getMinBlockZ()+8);
+        helper.assertTrue(!feature.place(config, level, generator, random, centre),
+                "Solid rock must reject without excavation");
+        BlockPos floor = new BlockPos(chunk.getMinBlockX()+8, 0, chunk.getMinBlockZ()+3);
+        level.setBlock(floor, Blocks.WATER.defaultBlockState(), 2);
+        helper.assertTrue(!feature.place(config, level, generator, random, floor),
+                "Flooded floor must reject the feature");
+        level.setBlock(floor, Blocks.AIR.defaultBlockState(), 2);
+        helper.assertTrue(!feature.place(config, level, generator, random,
+                        new BlockPos(chunk.getMinBlockX()+1, 0, chunk.getMinBlockZ()+3)),
+                "A siding crossing the chunk boundary must reject");
+        BlockPos start = chunk.getWorldPosition();
+        boolean success = false;
+        for (int seed = 0; seed < 512 && !success; seed++) {
+            success = placed.placeWithBiomeCheck(level, generator, net.minecraft.util.RandomSource.create(seed), start);
+        }
+        helper.assertTrue(success, "Production feature must find an off-centre cave floor");
+        long markers = level.getChunk(start).getBlockEntitiesPos().stream()
+                .filter(pos -> level.getBlockState(pos).is(SidingWorldgen.MARKER.get())).count();
+        helper.assertTrue(markers == 1, "Multiple attempts must leave only one siding in the chunk");
+        helper.assertTrue(!placed.placeWithBiomeCheck(level, generator, net.minecraft.util.RandomSource.create(42), start),
+                "Further attempts must not create another siding in the same chunk");
+        helper.assertTrue(level.getBlockState(new BlockPos(chunk.getMinBlockX()+8, 0, chunk.getMinBlockZ()+8)).is(Blocks.STONE),
+                "Feature must not excavate the solid centre column");
+        helper.succeed();
+    }
+
     private static void verify(GameTestHelper helper, Direction heading) {
         var level = helper.getLevel();
         BlockPos origin = helper.absolutePos(new BlockPos(8, 3, 8));
