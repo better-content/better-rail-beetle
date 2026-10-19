@@ -25,18 +25,9 @@ final class SidingPlacementResourceTest {
         var placement = placed.getAsJsonArray("placement");
         var types = new ArrayList<String>();
         placement.forEach(value -> types.add(value.getAsJsonObject().get("type").getAsString()));
-        assertEquals(List.of("minecraft:count", "minecraft:in_square", "minecraft:height_range",
-                "minecraft:environment_scan", "minecraft:random_offset", "minecraft:biome"), types);
-        assertEquals(16, placement.get(0).getAsJsonObject().get("count").getAsInt());
-        var height = placement.get(2).getAsJsonObject().getAsJsonObject("height");
-        assertEquals(-48, height.getAsJsonObject("min_inclusive").get("absolute").getAsInt());
-        assertEquals(64, height.getAsJsonObject("max_inclusive").get("absolute").getAsInt());
-        var scan = placement.get(3).getAsJsonObject();
-        assertEquals("down", scan.get("direction_of_search").getAsString());
-        assertEquals(8, scan.get("max_steps").getAsInt());
-        assertEquals("minecraft:air", scan.getAsJsonObject("allowed_search_condition").get("blocks").getAsString());
-        assertEquals("minecraft:solid", scan.getAsJsonObject("target_condition").get("type").getAsString());
-        assertEquals(1, placement.get(4).getAsJsonObject().get("y_spread").getAsInt());
+        assertEquals(List.of("minecraft:rarity_filter", "minecraft:biome"), types);
+        assertEquals(16, placement.get(0).getAsJsonObject().get("chance").getAsInt(),
+                "One bounded cave-wall search per selected chunk, not 16 random-height guesses");
         assertNull(getClass().getResource(ROOT + "worldgen/structure_set/cave_sidings.json"),
                 "No new phantom structure starts should be scheduled");
         assertNotNull(getClass().getResource(ROOT + "worldgen/structure/cave_siding.json"),

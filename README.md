@@ -26,7 +26,8 @@ power mod are optional.
 
 With Create loaded, new Overworld terrain can contain a cave siding: one baseline
 Beetle, an empty passenger cart, and a chest minecart already coupled in that order.
-The Beetle faces the forward rail terminus. Its working inventory contains 64 rails,
+The Beetle's amber nose faces out of an excavated ruined work-camp alcove into the
+natural cave, with both trailing carts deeper inside. Its working inventory contains 64 rails,
 64 cobblestone and 16 coal; the chest carries the same quantities as reserves.
 Freight does not automatically feed the working inventory. No advanced modules or
 alternate engine are supplied.
@@ -35,22 +36,29 @@ The consist stays braked and does no surveying until a player opens the Beetle (
 issues an authorized control). This parked state survives saving. Open it, inspect
 the supplies, select a projected route with `G`, and ride in the passenger cart.
 
-Discoveries use post-carving cave-floor feature placement, similar to Artifacts'
-underground campsites, rather than a structure-candidate grid.
-`data/better_rail_beetle/worldgen/placed_feature/cave_siding.json` controls 16 attempts
-per chunk: random X/Z and a random height from Y=-48 to Y=64, then a downward scan
-through air for solid ground within eight blocks and an offset onto the floor.
-The Overworld biome modifier adds this feature at `underground_decoration`.
-Each floor position tries four orientations and must remain at least 16 blocks
-beneath the local surface. Actual sites require a clear 3-wide, 13-long, 3-high
-footprint, ground within three blocks, and an unobstructed forward departure runway.
-No cave is excavated; flooded or deep-ravine sites are rejected, and the entire
-site fits in one chunk. At most one siding is placed per chunk. Failed attempts
-leave no structure starts, and new discoveries are not `/locate structure` targets.
-Legacy structure/piece registrations and the structure definition remain readable
-for existing saves, but no new legacy starts are generated. Old saved empty
-candidate records are not repaired or erased. Discovery density in natural pack
-terrain still needs field evaluation; 16 attempts does not mean 16 discoveries.
+Discoveries use post-carving feature placement at `underground_decoration`, not a
+structure grid. `data/better_rail_beetle/worldgen/placed_feature/cave_siding.json`
+selects an average of one chunk in sixteen for a bounded search across its columns
+and floor heights (Y=-48 through Y=64, at least 16 blocks under the local surface).
+Both normal air and cave air are accepted. Selection is not guaranteed placement.
+
+The search finds a dry natural cave mouth with excavatable rock behind it, then
+chooses the heading from that rock toward the cave. It carves an irregular alcove
+for the eight-block siding and a small lateral camp, with rough/mossy foundations,
+a broken timber canopy, a lantern, a workbench, rubble and an extinguished hearth.
+No extra loot container is added. Only the two immediate departure steps must
+already be open cave; the rest of the route is left to the normal terrain planner.
+A pre-existing straight 13-block corridor is no longer required.
+
+The camp and its untouched safety shell stay in one chunk. Excavation is limited
+to ordinary Overworld stone/soil/gravel; ores in the excavation, fluids, block
+entities, manufactured blocks, deep unsupported foundations, insufficient roof
+cover and intersecting structure starts veto the entire site before any writes.
+At most one camp is placed per chunk. New discoveries remain features, not
+`/locate structure` targets. Legacy structure/piece registrations and definitions
+remain readable for existing saves; old empty candidate records are not repaired
+or erased. Full-pack natural discovery frequency and visual acceptance remain
+separate from the local native noise-column probe and authored GameTests.
 
 A cobblestone-looking foundation block initializes the vehicles on the server,
 using deterministic per-site UUIDs and ordinary Create couplings. It records
@@ -124,9 +132,10 @@ Validation:
 ./gradlew verifyFull
 ```
 
-`verifyFull` runs the native GameTests, including all four discovery orientations,
-blocked/flooded exit rejection, supplied coupled departure, parked-state saving,
-and no replacement after removal. A production placed-feature test searches an
+`verifyFull` runs the native GameTests, including all four excavated-camp headings
+and departures into the natural cave, fluid/structure/roof vetoes, a one-search
+cave-air placement test, a fixed-seed native Overworld noise-column probe,
+parked-state saving, and no replacement after removal. A production placed-feature test searches an
 authored off-centre cave pocket, checks single-site placement and preserves a solid
 centre column. This is not a natural-terrain frequency test. Its fresh-world
 preparation moves previous `run-gametest/world` and `logs` into `run-gametest-history/<timestamp>/` rather than
