@@ -4,7 +4,19 @@
 
 The source native fixture uses the actual ForgeGradle RunConfig, not the premature
 JavaExec default. Preparation creates only absent comment-only server settings (native
-defaults) and copies authored structures into the fresh fixture. The gate requires actual
+defaults) and copies authored structures into the fresh fixture. A separate `nativeClear`
+source set attaches only to `gameTestServer`, never ordinary client/server or shipping
+runtime/sources archives. Its required arena-only mixin materializes old block entities at
+`StructureUtils.clearBlock` entry, before the native state replacement. Native
+`LevelChunk.setBlockState` replaces section state before old-block `onRemove` callbacks;
+callbacks such as chest removal can otherwise promote lazy worldgen DUMMY data against
+replacement air. Preparation uses the real native decoder once, never removes pending NBT,
+and throws if an existing BE state cannot materialize. Corrupt native loads still fail.
+The unsafe-excavation test additionally installs a genuinely pending DUMMY chest and runs
+the real arena clear, checking that neither pending nor live data remains afterward.
+Pure tests cover no-op, exactly-once decoding, null failure and original exception forwarding;
+RunConfig and actual archive guards cover nonshipping scope. These tests do not identify
+the former blocks at historical failed coordinates or establish fresh native acceptance. The gate requires actual
 startup/shutdown, exactly 41 completed/passed required native tests and zero ERROR/FATAL
 or failed-operation WARN/stack records in both actual latest/debug logs. With the required
 cave runtime enabled, the debug log must also prove one actual application of the Alex JSON

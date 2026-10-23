@@ -35,18 +35,24 @@ val visualHarness by sourceSets.creating {
 configurations[visualHarness.implementationConfigurationName].extendsFrom(configurations.implementation.get())
 configurations[visualHarness.runtimeOnlyConfigurationName].extendsFrom(configurations.runtimeOnly.get())
 
+// Mandatory native arena preparation; absent from ordinary client/server and shipping archives.
+val nativeClear by sourceSets.creating {
+    compileClasspath += sourceSets.main.get().output + sourceSets.main.get().compileClasspath
+}
+
 // Nonshipping observer: never a new mod, never in client/server or either shipping archive.
 val nativeFixture by sourceSets.creating {
     compileClasspath += sourceSets.main.get().output + sourceSets.main.get().compileClasspath
 }
 val nativeFixtureTest by sourceSets.creating {
-    compileClasspath += nativeFixture.output + configurations.testCompileClasspath.get()
+    compileClasspath += nativeFixture.output + nativeClear.output + configurations.testCompileClasspath.get()
 }
 val nativeWitnessTest by tasks.registering(Test::class) {
     testClassesDirs = nativeFixtureTest.output.classesDirs
-    classpath = nativeFixtureTest.output + nativeFixture.output + configurations.testCompileClasspath.get() + unitTestRuntime
+    classpath = nativeFixtureTest.output + nativeFixture.output + nativeClear.output + configurations.testCompileClasspath.get() + unitTestRuntime
     systemProperty("bc.nativeWitness.testsRoot", layout.buildDirectory.dir("native-witness-unit").get().asFile.absolutePath)
-    dependsOn(tasks.named(nativeFixture.classesTaskName), tasks.named(nativeFixtureTest.classesTaskName))
+    dependsOn(tasks.named(nativeFixture.classesTaskName), tasks.named(nativeClear.classesTaskName),
+        tasks.named(nativeFixtureTest.classesTaskName))
 }
 val verifyWitnessShippingExclusion by tasks.registering(JavaExec::class) {
     dependsOn("stageRuntimeJar", "sourcesJar", nativeFixture.classesTaskName)
@@ -76,6 +82,8 @@ minecraft {
             property("forge.enableGameTest", "true")
             property("forge.gameTestServer", "true")
             property("forge.enabledGameTestNamespaces", modId)
+            mods { getByName(modId) { source(nativeClear) } }
+            args("--mixin", "better_rail_beetle_native_clear.mixins.json")
             arg("--nogui")
         }
         create("visualServer") {

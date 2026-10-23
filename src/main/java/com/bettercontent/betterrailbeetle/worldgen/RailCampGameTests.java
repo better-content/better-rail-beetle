@@ -151,6 +151,25 @@ public final class RailCampGameTests {
         BlockPos roof = RailCamp.position(origin, heading, -3, 3);
         for (int h = 1; h <= 20; h++) level.setBlock(roof.above(h), Blocks.AIR.defaultBlockState(), 2);
         helper.assertTrue(!RailCamp.fits(level, bounds, origin, heading), "Insufficient overhead cover must reject");
+        // Deterministic regression for arena clearing of a lazy worldgen block entity.
+        // No read/materialization between installing the DUMMY and the real native clear.
+        BlockPos lazy = origin.above(2);
+        level.setBlock(lazy, Blocks.CHEST.defaultBlockState(), 2);
+        var chunk = level.getChunk(lazy);
+        chunk.removeBlockEntity(lazy);
+        var pending = new net.minecraft.nbt.CompoundTag();
+        pending.putString("id", "DUMMY");
+        pending.putInt("x", lazy.getX());
+        pending.putInt("y", lazy.getY());
+        pending.putInt("z", lazy.getZ());
+        chunk.setBlockEntityNbt(pending);
+        helper.assertTrue(!chunk.getBlockEntities().containsKey(lazy) && chunk.getBlockEntityNbt(lazy) != null,
+                "Regression must start with genuinely pending, unmaterialized chest data");
+        net.minecraft.gametest.framework.StructureUtils.clearSpaceForStructure(
+                new BoundingBox(lazy), lazy.getY(), level);
+        helper.assertTrue(level.getBlockState(lazy).isAir() && chunk.getBlockEntityNbt(lazy) == null
+                        && !chunk.getBlockEntities().containsKey(lazy),
+                "Native clear must decode before replacing the state, then remove the real entity without orphan pending data");
         helper.succeed();
     }
 

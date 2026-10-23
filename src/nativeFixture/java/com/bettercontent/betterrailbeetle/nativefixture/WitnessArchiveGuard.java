@@ -12,7 +12,8 @@ public final class WitnessArchiveGuard {
             var entries = zip.entries();
             while (entries.hasMoreElements()) {
                 String name = entries.nextElement().getName();
-                if (name.contains("/nativefixture/") || name.contains("native_witness")
+                if (name.contains("/nativeclear/") || name.contains("native_clear") || name.contains("nativeClear")
+                        || name.contains("/nativefixture/") || name.contains("native_witness")
                         || name.contains("nativeFixture") || name.contains(".native-fixture-inputs")
                         || name.endsWith("native-witness.json") || name.endsWith("source-fixture.json")) {
                     throw new IllegalStateException("Nonshipping native witness leaked into archive entry: " + name);
