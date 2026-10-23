@@ -1,0 +1,61 @@
+// Explicit SOURCE-only forensics. Never enabled by verifyFull, client or server defaults.
+def witnessValue = providers.gradleProperty('rail_native_witness').orElse('false').get()
+if (!(witnessValue in ['false', 'true'])) throw new GradleException('rail_native_witness must be exactly false or true')
+def nativeRun = minecraft.runs.getByName('gameTestServer')
+tasks.register('verifyNativeWitnessRunConfigGuard') {
+    group = 'verification'
+    description = 'Checks actual default-off/gameTestServer-only Forge RunConfig attachment, not a mock model.'
+    doLast {
+        minecraft.runs.each { run ->
+            boolean expected = witnessValue == 'true' && run.name == 'gameTestServer'
+            def attached = run.allSources.count { it.name == 'nativeFixture' }
+            def mixins = run.args.count { it == 'better_rail_beetle_native_witness.mixins.json' }
+            boolean enabledProperty = run.properties['bc.rail.nativeWitness.enabled'] == 'true'
+            if (attached != (expected ? 1 : 0) || mixins != (expected ? 1 : 0) || enabledProperty != expected ||
+                    run.allSources.any { it.name == 'nativeFixtureTest' })
+                throw new GradleException('Native witness escaped its explicit gameTestServer-only RunConfig scope: ' + run.name)
+            if (!expected && run.properties.keySet().any { it.startsWith('bc.rail.nativeWitness.') })
+                throw new GradleException('Unexpected witness properties on default/non-native RunConfig: ' + run.name)
+        }
+        logger.lifecycle('Actual Forge RunConfig witness scope/default-no-witness guard PASS; enabled=' + witnessValue)
+    }
+}
+tasks.matching { it.name == 'verifyFast' }.configureEach { dependsOn('verifyNativeWitnessRunConfigGuard') }
+if (witnessValue == 'true') {
+    def directory = project.file(nativeRun.workingDirectory).canonicalFile
+    def token = directory.name
+    if (UUID.fromString(token).toString() != token || directory.parentFile != layout.buildDirectory.dir('gametest').get().asFile.canonicalFile)
+        throw new GradleException('Witness requires the existing fresh owning native UUID RunConfig')
+    nativeRun.mods.getByName(project.property('mod_id').toString()).source(sourceSets.getByName('nativeFixture'))
+    nativeRun.args('--mixin', 'better_rail_beetle_native_witness.mixins.json')
+    nativeRun.property('bc.rail.nativeWitness.enabled', 'true')
+    nativeRun.property('bc.rail.nativeWitness.token', token)
+    nativeRun.property('bc.rail.nativeWitness.output', new File(directory, 'native-witness.json').absolutePath)
+    tasks.matching { it.name == 'runGameTestServer' }.configureEach {
+        // Genuine compile, JVM privacy/default-off tests and BOTH actual archive checks precede Native.
+        dependsOn('verifyFast', 'nativeFixtureClasses')
+        doFirst {
+            if (new File(directory, 'native-witness.json').exists())
+                throw new GradleException('Refusing an existing native witness; preserve the old fixture')
+        }
+        doLast {
+            def witness = new File(directory, 'native-witness.json')
+            if (!witness.isFile() || witness.length() == 0 || witness.length() > 1024 * 1024)
+                throw new GradleException('Missing/oversize actual native witness; no forensic completeness claim')
+            def parsed = new groovy.json.JsonSlurper().parse(witness)
+            if (parsed.schema != 'bc.rail_native_witness.v1' || parsed.run_token != token || parsed.enabled != true ||
+                    parsed.completion_event != 'ServerStoppedEvent')
+                throw new GradleException('Stale or unrecognized native witness')
+            def debug = new File(directory, 'logs/debug.log').text
+            ['ClearBoundaryWitnessMixin': 'net.minecraft.gametest.framework.StructureUtils',
+             'ClearMutationWitnessMixin': 'net.minecraft.world.level.Level',
+             'PendingPromotionWitnessMixin': 'net.minecraft.world.level.chunk.LevelChunk'].each { mixin, target ->
+                def application = 'Mixing ' + mixin + ' from better_rail_beetle_native_witness.mixins.json into ' + target
+                if (debug.readLines().count { it.contains(application) } != 1)
+                    throw new GradleException('Missing/duplicate actual native witness mixin application: ' + mixin)
+            }
+            logger.lifecycle('Retained bounded native witness; observation_scope_complete=' + parsed.observation_scope_complete +
+                    ', truncated_or_missing=' + parsed.truncated_or_missing + '; failed native operations still FAIL')
+        }
+    }
+}

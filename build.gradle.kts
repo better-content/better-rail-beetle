@@ -1,6 +1,3 @@
-import java.time.Instant
-import java.nio.file.Files
-
 plugins {
     idea
     `java-library`
@@ -38,6 +35,27 @@ val visualHarness by sourceSets.creating {
 configurations[visualHarness.implementationConfigurationName].extendsFrom(configurations.implementation.get())
 configurations[visualHarness.runtimeOnlyConfigurationName].extendsFrom(configurations.runtimeOnly.get())
 
+// Nonshipping observer: never a new mod, never in client/server or either shipping archive.
+val nativeFixture by sourceSets.creating {
+    compileClasspath += sourceSets.main.get().output + sourceSets.main.get().compileClasspath
+}
+val nativeFixtureTest by sourceSets.creating {
+    compileClasspath += nativeFixture.output + configurations.testCompileClasspath.get()
+}
+val nativeWitnessTest by tasks.registering(Test::class) {
+    testClassesDirs = nativeFixtureTest.output.classesDirs
+    classpath = nativeFixtureTest.output + nativeFixture.output + configurations.testCompileClasspath.get() + unitTestRuntime
+    systemProperty("bc.nativeWitness.testsRoot", layout.buildDirectory.dir("native-witness-unit").get().asFile.absolutePath)
+    dependsOn(tasks.named(nativeFixture.classesTaskName), tasks.named(nativeFixtureTest.classesTaskName))
+}
+val verifyWitnessShippingExclusion by tasks.registering(JavaExec::class) {
+    dependsOn("stageRuntimeJar", "sourcesJar", nativeFixture.classesTaskName)
+    classpath = nativeFixture.output
+    mainClass.set("com.bettercontent.betterrailbeetle.nativefixture.WitnessArchiveGuard")
+    args(layout.buildDirectory.file("libs/${base.archivesName.get()}-$modVersion.jar").get().asFile.absolutePath,
+        tasks.named<Jar>("sourcesJar").get().archiveFile.get().asFile.absolutePath)
+}
+
 minecraft {
     mappings("official", minecraftVersion)
     copyIdeResources = true
@@ -45,6 +63,8 @@ minecraft {
         configureEach {
             workingDirectory(project.file("run"))
             property("forge.logging.console.level", "info")
+            // Exploded source runs need the same config registered by the runtime JAR manifest.
+            args("--mixin", "better_rail_beetle.mixins.json")
             property("mixin.env.remapRefMap", "true")
             property("mixin.env.refMapRemappingFile", file("build/createSrgToMcp/output.srg").absolutePath)
             mods { create(modId) { source(sourceSets.main.get()) } }
@@ -88,6 +108,9 @@ dependencies {
     runtimeOnly(deobf("dev.engine-room.flywheel:flywheel-forge-$minecraftVersion:$flywheelVersion"))
     implementation(deobf("com.tterrag.registrate:Registrate:$registrateVersion"))
     implementation("io.github.llamalad7:mixinextras-forge:0.5.4")
+    // Forge wrapper embeds the runtime common JAR but does not expose its compile API.
+    compileOnly("io.github.llamalad7:mixinextras-common:0.5.4")
+    testImplementation("io.github.llamalad7:mixinextras-common:0.5.4")
     compileOnly(deobf("curse.maven:sodiumdynamiclights-551736:6044481"))
     compileOnly(deobf("curse.maven:goety-586095:8087429"))
 
@@ -125,10 +148,20 @@ tasks.withType<JavaExec>().configureEach {
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
     // Deterministic unit tests do not need the heavyweight cave-integration runtime.
-    classpath = sourceSets["test"].output + sourceSets["main"].output +
-            configurations.testCompileClasspath.get() + unitTestRuntime
+    if (name == "test") {
+        classpath = sourceSets["test"].output + sourceSets["main"].output +
+                configurations.testCompileClasspath.get() + unitTestRuntime
+    }
 }
-tasks.named<Jar>("jar") { finalizedBy("reobfJar") }
+// Two independent clean full gates must retain the same runtime artifact identity.
+tasks.withType<org.gradle.api.tasks.bundling.AbstractArchiveTask>().configureEach {
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
+}
+tasks.named<Jar>("jar") {
+    manifest.attributes("MixinConfigs" to "better_rail_beetle.mixins.json")
+    finalizedBy("reobfJar")
+}
 
 val stageRuntimeJar by tasks.registering(Copy::class) {
     dependsOn(tasks.named("reobfJar"))
@@ -137,26 +170,9 @@ val stageRuntimeJar by tasks.registering(Copy::class) {
     rename { "${base.archivesName.get()}-$modVersion.jar" }
 }
 
-// Fresh fixtures without deleting previous worlds or diagnostic evidence.
-val cleanGameTestWorld by tasks.registering {
-    doLast {
-        val retained = layout.projectDirectory.dir("run-gametest-history/${Instant.now().toEpochMilli()}").asFile
-        for (name in listOf("world", "logs")) {
-            val previous = layout.projectDirectory.dir("run-gametest/$name").asFile
-            if (previous.exists()) {
-                retained.mkdirs()
-                Files.move(previous.toPath(), retained.resolve(name).toPath())
-            }
-        }
-    }
-}
-val syncGameTestStructures by tasks.registering(Sync::class) {
-    from(layout.projectDirectory.dir("src/main/resources/gameteststructures"))
-    into(layout.projectDirectory.dir("run-gametest/gameteststructures"))
-}
-tasks.matching { it.name.startsWith("prepareRunGameTestServer") }.configureEach {
-    dependsOn(cleanGameTestWorld, syncGameTestStructures)
-}
+// A fresh UUID native RunConfig leaves complete old run-gametest trees untouched.
+apply(from = "gradle/native-gametest-fixture.gradle")
+apply(from = "gradle/native-witness.gradle")
 
 val syncVisualHarnessOptions by tasks.registering(Copy::class) {
     from(layout.projectDirectory.file("src/visualHarness/options.txt"))
@@ -167,5 +183,7 @@ tasks.matching { it.name.startsWith("prepareRunVisualClient") }.configureEach {
 }
 
 tasks.named("assemble") { dependsOn(stageRuntimeJar) }
-tasks.register("verifyFast") { dependsOn(tasks.named("test"), tasks.named("assemble")) }
+tasks.register("verifyFast") {
+    dependsOn(tasks.named("test"), tasks.named("assemble"), nativeWitnessTest, verifyWitnessShippingExclusion)
+}
 tasks.register("verifyFull") { dependsOn(tasks.named("verifyFast"), tasks.named("runGameTestServer")) }

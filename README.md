@@ -1,5 +1,84 @@
 # Better Rail Beetle
 
+## Native source fixture safety
+
+The source native fixture uses the actual ForgeGradle RunConfig, not the premature
+JavaExec default. Preparation creates only absent comment-only server settings (native
+defaults) and copies authored structures into the fresh fixture. The gate requires actual
+startup/shutdown, exactly 41 completed/passed required native tests and zero ERROR/FATAL
+or failed-operation WARN/stack records in both actual latest/debug logs. With the required
+cave runtime enabled, the debug log must also prove one actual application of the Alex JSON
+serialization mixin. `verifyFast` exercises settings preservation and negative diagnostic/
+population controls without Minecraft. This does not authorize the separate visual harness or prove
+visual acceptance. Retain complete old builds, libraries, fixtures and evidence before
+any independently authorized clean/reset.
+
+## Opt-in nonshipping lifecycle witness (not acceptance)
+
+`rail_native_witness` defaults to exactly `false`. Only a separately admitted forensic
+GameTest invocation may set it to `true`; this is not a new test profile or a Native grant.
+The separate `nativeFixture` source set joins the same owning mod **only** in that explicit
+`gameTestServer` RunConfig. Neither ordinary client/server/default GameTests nor either
+shipping runtime/sources JAR includes its classes or mixin resource. `verifyFast` checks
+actual RunConfig attachment/default absence, both actual archives, and pure privacy/bounds
+contracts before an enabled witness can start its unchanged 41 required native tests.
+Actual Gradle/Native qualification remains separately scheduled; standalone javac/JUnit
+readiness does not establish RunConfig execution, new archive identity or Mixin application.
+
+The observer reads pending scalar `id/x/y/z/keepPacked`, existing public state descriptions,
+chunk status and up to eight caller class/method/line entries. It never serializes/copies a
+CompoundTag, inventory, loot seed, payload, private path or player name. The actual expanded
+`StructureUtils` boundary binds a synchronous thread/world-identity scope, released in finally.
+Within that scope, `Level.setBlock` already acquired the real chunk and old state: the witness
+uses those original values before its existing mutation, consulting only the public pending
+Map.get accessor for old-BE-state candidates. Proposed new state is an existing argument,
+not a committed-outcome claim. No getChunkNow, added state read or position/voxel scan remains.
+Promotion observes the ORIGINAL state-read return and original pending-tag argument, scoped
+to the same clear operation. Its public getLevel getter compares only existing owner identity.
+No diagnostic load, materialization, native mutation, seed/default or timing change is added.
+Original arguments/results/exceptions are forwarded once. No old consumed NBT is reconstructed.
+
+Bounds remain 128 clear scopes, 64 distinct supplied chunks per scope, 4096 eligible candidate
+calls in total (repeated positions consume budget), 1024 records and a 1MiB artifact. Non-BE
+old states/no-op paths and out-of-scope promotion are not pending-map absence proof. Aborted or
+unbound scopes, omitted caller tails, field/record/byte/candidate/chunk truncation are explicit, never
+converted into proof about unseen terrain or data. Scalars are buffered; serialization
+and one create-new `native-witness.json` write happen only at `ServerStoppedEvent` in the
+owning fresh UUID fixture. An abort before that event can leave no witness: that is not
+successful observation. Failed native loads remain FAIL even if all tests pass or a
+witness exists; the owning guard also rejects the exact logger-scoped reverse-worded
+LevelChunk failures. Do not discard pending data or infer a global DUMMY workaround.
+
+## Optional Alex's Caves configuration serialization
+
+When both Alex's Caves and Citadel bytecode are present, a soft-target production mixin
+serializes Alex's existing JSON read/create/read/validate/write transaction. It forwards
+all original arguments and calls the original once, preserving results, original failure
+handling and terrain/default values. A reentrant lock releases in `finally`; no NightConfig
+getters/events, native world reads, worker threads or delayed work are added inside it.
+The narrower file transaction is locked, not the surrounding Forge config callbacks or
+whole world/config reload. Missing optional targets skip safely; genuine bytecode lookup IO
+failures are not treated as absence. Pure contention/recursion/failure/absence contracts
+run without cave classes; they do not establish native race acceptance.
+
+## Playtest diagnostics
+
+`bc.playtest.better_rail_beetle.beetle` reports control/context rejections, authored governor
+requirements, route-selection reasons and departure admission, plus completed/recovered
+route observations. Native checks keep their original short-circuit order and run once.
+Placement/support and rollback-invocation counts accumulate on the existing vehicle and
+are reported at control/route boundaries, never per rail or motion tick. Rollback
+invocation is not independently observed restoration; departure admission is not route
+completion. Existing operation/Beetle UUIDs identify causal native work, not players.
+
+INFO startup supplies enabled/version/integration presence and exact own-artifact source
+metadata when available (UNKNOWN otherwise). The repository-local Java17 helper shares
+120 DEBUG/TRACE details/minute, burst20,256 keys and2048-character records. Native END ticks
+emit30-second summaries; stop clears aggregation without rearming TRACE or the allowance.
+Standalone remains native INFO; pack profile chooses scoped DEBUG/`bc.playtest.level`.
+No route dumps, inventory/NBT, names, payloads, extra terrain probes or RNG draws are added.
+Common six-case and work/rollback projection tests run alongside the existing native gates.
+
 ## Scope and authority
 
 This repository owns its mod-specific behavior and authoring inputs. Read [local instructions](AGENTS.md)
@@ -138,8 +217,8 @@ cave-air placement test, a fixed-seed native Overworld noise-column probe,
 parked-state saving, and no replacement after removal. A production placed-feature test searches an
 authored off-centre cave pocket, checks single-site placement and preserves a solid
 centre column. This is not a natural-terrain frequency test. Its fresh-world
-preparation moves previous `run-gametest/world` and `logs` into `run-gametest-history/<timestamp>/` rather than
-deleting them. These isolated tests do not establish natural-terrain frequency or
+preparation now uses a new `build/gametest/<UUID>/` ForgeGradle RunConfig and leaves
+complete prior `run-gametest/` and `run-gametest-history/` trees untouched. These isolated tests do not establish natural-terrain frequency or
 visual acceptance in the full pack.
 
 ## Minimal visual harness

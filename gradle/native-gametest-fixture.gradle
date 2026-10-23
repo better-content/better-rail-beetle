@@ -1,0 +1,129 @@
+// Reviewed authored native population; update with actual test additions/removals.
+def expectedNativeTests = 41
+
+def nativeRun = minecraft.runs.getByName('gameTestServer')
+def fixtureRoot = layout.buildDirectory.dir('gametest').get().asFile.canonicalFile
+def withinFixtureRoot = { File directory -> directory.canonicalPath.startsWith(fixtureRoot.path + File.separator) }
+// Keep an existing per-invocation evidence RunConfig (anchors); otherwise separate native
+// tests from the shared client directory. No old working tree is reset or reconstructed.
+if (!withinFixtureRoot(project.file(nativeRun.workingDirectory))) {
+    nativeRun.workingDirectory(new File(fixtureRoot, UUID.randomUUID().toString()))
+}
+def configuredNativeDirectory = {
+    def directory = project.file(nativeRun.workingDirectory).canonicalFile
+    if (!withinFixtureRoot(directory)) throw new GradleException('Native RunConfig must use a fresh build/gametest fixture')
+    directory
+}
+def prepareNativeProperties = { File properties ->
+    if (!properties.exists()) {
+        properties.parentFile.mkdirs()
+        properties.text = '# Fresh source GameTest fixture: native defaults, no overrides.\n'
+    }
+}
+def verifyNativeDiagnostics = { String text ->
+    def severity = null
+    def failures = []
+    text.eachLine { line ->
+        def header = (line =~ /(?:\/|\[)(TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\]/)
+        if (header.find()) severity = header.group(1)
+        if (severity in ['ERROR', 'FATAL']) failures.add(line)
+        if (severity == 'WARN' && (line =~ /(?i)(?:failed to|error (?:while|when)) (?:load|register|parse|execute|save|read|write|start|join)|(?:registry|registries|script|mixin)[^\r\n]*(?:failed|failure|corrupt)|(?:required tests?|game ?tests?|test batch|\btest\b)[^\r\n]*(?:failed|timed out)|(?:failed|timed out)[^\r\n]*\b(?:required )?(?:game ?tests?|tests?)\b|^\s*(?:Caused by: |Suppressed: |Exception in thread "[^"]+" )?(?:[a-zA-Z_$][\w$]*\.)*(?:\w*Exception|\w*Error):/).find()) failures.add(line)
+    }
+    // Match the actual reverse-worded SDK failures, with the owning logger boundary intact.
+    text.eachLine { line ->
+        if ((line =~ /\[(?:net\.minecraft\.world\.level\.chunk\.LevelChunk\/?|minecraft\/LevelChunk)\]: Tried to load (?:a block entity for block .* but failed at location |a DUMMY block entity @ .* but found not block entity block )/).find())
+            failures.add(line)
+    }
+    if (failures) throw new GradleException('Actual native failure requires diagnosis: ' + failures.join('\n'))
+}
+def verifyNativeCompletion = { String text, int expected ->
+    if (!text.contains('Started game test server') || !text.contains('Game test server shutting down'))
+        throw new GradleException('Missing actual native server startup/shutdown proof')
+    def completed = (text =~ /(?m)^.*?=+ (\d+) GAME TESTS COMPLETE =+.*$/).collect { it[1].toInteger() }
+    def passed = (text =~ /(?m)^.*?All (\d+) required tests passed.*$/).collect { it[1].toInteger() }
+    if (expected > 0 && (completed != [expected] || passed != [expected]))
+        throw new GradleException("Incomplete native population: expected=${expected}, complete=${completed}, passed=${passed}")
+    if (expected == 0 && (completed.any { it != 0 } || passed.any { it != 0 }))
+        throw new GradleException('Startup-only smoke unexpectedly ran an unreviewed test population')
+}
+
+tasks.matching { it.name == 'runGameTestServer' }.configureEach {
+    doFirst {
+        // JavaExec.workingDir is populated later by ForgeGradle; it is NOT authoritative here.
+        def directory = configuredNativeDirectory()
+        if (new File(directory, 'world').exists() || new File(directory, 'logs/latest.log').exists() ||
+                new File(directory, 'logs/debug.log').exists() || new File(directory, 'source-fixture.json').exists())
+            throw new GradleException('Refusing reused native fixture: ' + directory)
+        directory.mkdirs()
+        new File(directory, 'source-fixture.json').text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([
+            working_directory: directory.absolutePath, expected_native_tests: expectedNativeTests,
+            mode: expectedNativeTests == 0 ? 'dedicated_startup_smoke' : 'authored_gametests',
+            old_world_absent: true, old_latest_log_absent: true, old_debug_log_absent: true
+        ])) + '\n'
+        prepareNativeProperties(new File(directory, 'server.properties'))
+        copy {
+            from([file('src/main/resources/gameteststructures'), file('src/gameteststructures'), file('gameteststructures')].findAll { it.isDirectory() })
+            into(new File(directory, 'gameteststructures'))
+            duplicatesStrategy = DuplicatesStrategy.FAIL
+        }
+        logger.lifecycle('Native GameTest RunConfig workingDirectory=' + directory)
+    }
+    doLast {
+        ['latest.log', 'debug.log'].each { name ->
+            def log = new File(configuredNativeDirectory(), 'logs/' + name)
+            if (!log.isFile() || log.length() == 0) throw new GradleException('Missing actual native log: ' + log)
+            verifyNativeDiagnostics(log.text)
+            verifyNativeCompletion(log.text, expectedNativeTests)
+            if (log.text.readLines().count { it.contains('BC_PLAYTEST') && it.contains('mod=' + project.property('mod_id') + ' event=logging.status') } != 1)
+                throw new GradleException('Missing/duplicate own structured native startup status: ' + log)
+        }
+        if (providers.gradleProperty('includeCaveIntegrationRuntime').orElse('true').get().toBoolean()) {
+            def debug = new File(configuredNativeDirectory(), 'logs/debug.log').text
+            def proof = 'Mixing AlexBiomeConfigIoMixin from better_rail_beetle.mixins.json into com.github.alexmodguy.alexscaves.server.config.BiomeGenerationConfig'
+            if (debug.readLines().count { it.contains(proof) } != 1)
+                throw new GradleException('Required actual Alex JSON serialization mixin application was not observed exactly once')
+        }
+        logger.lifecycle('Verified native population=' + expectedNativeTests + '; latest/debug ERROR/FATAL/failed-WARN=0; required mixin applied; fresh fixture retained')
+    }
+}
+
+tasks.register('verifyNativeGameTestFixtureGuard') {
+    group = 'verification'
+    description = 'Checks absent-only settings, exact native counts and diagnostic rejection without Minecraft.'
+    doLast {
+        configuredNativeDirectory()
+        def properties = layout.buildDirectory.file('native-fixture-guard/' + UUID.randomUUID() + '/server.properties').get().asFile
+        prepareNativeProperties(properties)
+        if (!properties.isFile() || !properties.readLines().every { !it || it.startsWith('#') })
+            throw new GradleException('Fresh settings must exist without overriding native defaults')
+        def existing = 'max-tick-time=123456\nlevel-name=retained-fixture\n'
+        properties.text = existing
+        prepareNativeProperties(properties)
+        if (properties.text != existing) throw new GradleException('Preparation overwrote existing settings')
+        verifyNativeDiagnostics('[00:00:00] [main/INFO] Native fixture ready')
+        verifyNativeDiagnostics('[00:00:00] [main/WARN] [example/Other]: Tried to load a DUMMY block entity @ BlockPos{x=1,y=2,z=3} but found not block entity block Block{minecraft:air}')
+        verifyNativeDiagnostics('[00:00:00] [main/WARN] [minecraft/LevelChunk]: Optional native metadata probe absent')
+        ['[00:00:00] [main/ERROR] Synthetic settings failure', '[00:00:00] [Server thread/FATAL] Synthetic native failure',
+         '[00:00:00] [Server thread/WARN] Test module.example failed!', '[00:00:00] [Server thread/WARN] Failed required test module.example',
+         '[00:00:00] [main/WARN] Failed to read native config', '[21Oct2026 00:00:00.000] [Server thread/WARN] Required tests failed',
+         '[21Oct2026 00:00:00.000] [Server thread/WARN] [net.minecraft.world.level.chunk.LevelChunk/]: Tried to load a block entity for block Block{minecraft:air} but failed at location BlockPos{x=246,y=-12,z=229}',
+         '[00:00:00] [Server thread/WARN] [minecraft/LevelChunk]: Tried to load a DUMMY block entity @ BlockPos{x=246,y=-12,z=229} but found not block entity block Block{minecraft:air}',
+         '[00:00:00] [main/WARN] Native operation incomplete\njava.lang.IllegalStateException: original failure'].each { invalid ->
+            boolean rejected = false
+            try { verifyNativeDiagnostics(invalid) } catch (GradleException expected) { rejected = true }
+            if (!rejected) throw new GradleException('Diagnostic guard accepted synthetic failure')
+        }
+        def lifecycle = 'Started game test server\nGame test server shutting down\n'
+        def success = lifecycle + '========= 3 GAME TESTS COMPLETE =========\nAll 3 required tests passed :)\n'
+        verifyNativeCompletion(success, 3)
+        verifyNativeCompletion(lifecycle, 0)
+        [[success, 2], [lifecycle, 3], [success + success, 3], ['', 0],
+         [success.replace('All 3 required tests passed :)', 'Some required tests failed'), 3]].each { invalid ->
+            boolean rejected = false
+            try { verifyNativeCompletion(invalid[0], invalid[1]) } catch (GradleException expected) { rejected = true }
+            if (!rejected) throw new GradleException('Native population guard accepted incomplete/stale/duplicate proof')
+        }
+        logger.lifecycle('Native fixture guard: absent/defaults + preserve-existing + ERROR/FATAL + native-count negative controls PASS')
+    }
+}
+tasks.matching { it.name == 'verifyFast' }.configureEach { dependsOn('verifyNativeGameTestFixtureGuard') }

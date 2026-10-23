@@ -1,5 +1,8 @@
 package com.bettercontent.betterrailbeetle.entity;
 
+import com.bettercontent.betterrailbeetle.diagnostics.PlaytestDiagnostics;
+import com.bettercontent.betterrailbeetle.diagnostics.PlaytestLog;
+
 import com.bettercontent.betterrailbeetle.RailBeetleConfig;
 import com.bettercontent.betterrailbeetle.RailBeetleRegistries;
 import com.bettercontent.betterrailbeetle.compat.CreateCompat;
@@ -668,6 +671,7 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
         if (completedRoute) postDiscoveryWork(com.bettercontent.betterrailbeetle.api.BeetleWorkEvent.Kind.ROUTE_FINISHED, engineKind().id());
         applyAutomaticBrake(true);
         syncRoutes();
+        observePlaytest("beetle.route_finished", "observed", completedRoute ? "completed_with_placements" : "completed_without_placements");
     }
 
     private void recoverFromInvalidRoute() {
@@ -791,6 +795,7 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
             return false;
         }
         placedRouteRails.add(step.railPos().immutable());
+        if (PlaytestDiagnostics.LOG.enabled("beetle")) { playtestPlacedRails++; playtestPlacedSupports += supportCount; }
         return true;
     }
 
@@ -814,6 +819,7 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
         }
         returnItem(new ItemStack(railItem));
         supportItems.forEach(item -> returnItem(new ItemStack(item)));
+        if (PlaytestDiagnostics.LOG.enabled("beetle")) playtestRollbackCalls++;
     }
 
     private ItemStack[] snapshotInventory() {
@@ -850,10 +856,23 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
         return level().destroyBlock(pos, true, this, 512) || level().getBlockState(pos).isAir();
     }
 
+    private int playtestPlacedRails, playtestPlacedSupports, playtestRollbackCalls;
+
+    private void observePlaytest(String event, String result, String reason) {
+        var log = PlaytestDiagnostics.LOG;
+        if (!log.enabled("beetle")) return;
+        log.debug("beetle", event, PlaytestLog.Context.server(level().dimension().location().toString(), level().getGameTime()),
+            result, reason, () -> PlaytestLog.fields("beetle", getUUID(), "operation", discoveryOperation == null ? "UNKNOWN" : discoveryOperation,
+                "mode", mode, "brake", forcedBrake) + com.bettercontent.betterrailbeetle.diagnostics.FeatureObservation.fields(
+                    playtestPlacedRails, playtestPlacedSupports, playtestRollbackCalls));
+    }
+
     public void contextualAction(ServerPlayer player, long generation, int routeId) {
-        if (!canContextPlayer(player)) return;
+        if (!canContextPlayer(player)) { observePlaytest("beetle.context", "rejected", "untracked_or_invalid_context"); return; }
         long now = level().getGameTime();
-        if (now - lastContextAction.getOrDefault(player.getUUID(), Long.MIN_VALUE / 2) < G_COOLDOWN_TICKS) return;
+        if (now - lastContextAction.getOrDefault(player.getUUID(), Long.MIN_VALUE / 2) < G_COOLDOWN_TICKS) {
+            observePlaytest("beetle.context", "rejected", "cooldown"); return;
+        }
         if (generation >= 0 && routeId >= 0) {
             if (!followRoute(player, generation, routeId)) return;
         } else if (activeRoute != null) {
@@ -878,17 +897,24 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
     }
 
     private boolean followRoute(Player player, long generation, int routeId) {
-        if (forcedBrake || mode != BeetleMode.READY || activeRoute != null) return false;
+        if (forcedBrake || mode != BeetleMode.READY || activeRoute != null) {
+            observePlaytest("beetle.route_select", "rejected", forcedBrake ? "forced_brake" : activeRoute != null ? "route_active" : "not_ready");
+            return false;
+        }
         RouteProposal selected = findProposal(generation, routeId);
         BlockPos rail = railPosition();
-        if (selected == null || rail == null || !rail.equals(selected.origin())
-                || noseHeading != selected.originHeading() || !isForwardTerminus(rail)
-                || !aimsAt(player, selected) || !TerrainRoutePlanner.isRouteStillValid(level(), selected)) {
+        String rejection = selected == null ? "unknown_or_stale_route" : rail == null ? "no_rail"
+            : !rail.equals(selected.origin()) ? "origin_changed" : noseHeading != selected.originHeading() ? "heading_changed"
+            : !isForwardTerminus(rail) ? "not_forward_terminus" : !aimsAt(player, selected) ? "aim_mismatch"
+            : !TerrainRoutePlanner.isRouteStillValid(level(), selected) ? "geometry_changed" : null;
+        if (rejection != null) {
+            observePlaytest("beetle.route_select", "rejected", rejection);
             player.displayClientMessage(Component.translatable("message.better_rail_beetle.route_changed"), true);
             nextRefreshTick = level().getGameTime();
             return false;
         }
         activeRoute = selected;
+        playtestPlacedRails = playtestPlacedSupports = playtestRollbackCalls = 0;
         discoveryOperator = player.getUUID();
         discoveryOperation = UUID.randomUUID();
         activeStep = 0;
@@ -902,6 +928,7 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
         applyAutomaticBrake(false);
         level().playSound(null, blockPosition(), RailBeetleRegistries.WHISTLE.get(), SoundSource.BLOCKS, 2.0f, 1.0f);
         syncRoutes();
+        observePlaytest("beetle.route_select", "applied", "departure_armed");
         return true;
     }
 
@@ -916,8 +943,11 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
 
     public void control(Player player, BeetleControl action) {
         boolean remote = !canNearbyPlayerControl(player);
-        if (remote && !canRemoteControl(player)) return;
-        if (remote && action != BeetleControl.STOP && !consumeWork(WorkAction.REMOTE, 1)) return;
+        if (remote && !canRemoteControl(player)) { observePlaytest("beetle.control", "rejected", "remote_not_authorized"); return; }
+        if (remote && action != BeetleControl.STOP && !consumeWork(WorkAction.REMOTE, 1)) { observePlaytest("beetle.control", "rejected", "remote_power_shortage"); return; }
+        BeetleMode beforeMode = mode;
+        BeetleSpeed beforeSpeed = speedTier;
+        boolean beforeBrake = forcedBrake;
         discoveryParked = false;
         switch (action) {
             case TOGGLE_HAND_BRAKE -> {
@@ -949,11 +979,13 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
         }
         syncRoutes();
         syncStatus();
+        if (beforeMode != mode || beforeSpeed != speedTier || beforeBrake != forcedBrake || action == BeetleControl.TOGGLE_SEARCHLIGHT)
+            observePlaytest("beetle.control", "observed", action.name());
     }
 
     private void selectForwardSpeed(BeetleSpeed selected) {
-        if (selected == BeetleSpeed.DOUBLE && profile().governorTier() < 1) return;
-        if (selected == BeetleSpeed.TRIPLE && profile().governorTier() < 2) return;
+        if (selected == BeetleSpeed.DOUBLE && profile().governorTier() < 1) { observePlaytest("beetle.speed", "rejected", "governor_tier_one_required"); return; }
+        if (selected == BeetleSpeed.TRIPLE && profile().governorTier() < 2) { observePlaytest("beetle.speed", "rejected", "governor_tier_two_required"); return; }
         speedTier = selected;
         if (forcedBrake) return;
         if (mode == BeetleMode.NEUTRAL) mode = BeetleMode.STOPPED;
@@ -1220,7 +1252,10 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
 
     private double horizontalSpeed() { return getDeltaMovement().horizontalDistance(); }
 
-    private void invalidateRoute() { recoverFromInvalidRoute(); }
+    private void invalidateRoute() {
+        recoverFromInvalidRoute();
+        observePlaytest("beetle.route_recovery", "observed", "route_invalidated");
+    }
 
     private void pause() {
         mode = activeRoute == null ? BeetleMode.STOPPED : BeetleMode.PAUSED;

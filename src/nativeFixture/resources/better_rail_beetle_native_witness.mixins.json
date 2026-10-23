@@ -1,0 +1,8 @@
+{
+  "required": true,
+  "minVersion": "0.8.5",
+  "package": "com.bettercontent.betterrailbeetle.nativefixture.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": ["ClearBoundaryWitnessMixin", "ClearMutationWitnessMixin", "PendingPromotionWitnessMixin"],
+  "injectors": {"defaultRequire": 1}
+}
