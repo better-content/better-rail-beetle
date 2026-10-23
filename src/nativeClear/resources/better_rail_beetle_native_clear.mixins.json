@@ -3,6 +3,6 @@
   "minVersion": "0.8",
   "package": "com.bettercontent.betterrailbeetle.nativeclear.mixin",
   "compatibilityLevel": "JAVA_17",
-  "mixins": ["ClearPreparationMixin", "PromotionWarningMixin", "ProducerPendingAccess", "ProducerSectionMixin", "ProducerScopeMixin"],
+  "mixins": ["ClearPreparationMixin", "PromotionWarningMixin", "ProducerPendingAccess", "ProducerSectionMixin", "ProducerScopeMixin", "ClearReadinessMixin", "ReadinessMapAccess", "ReadinessCacheAccess"],
   "injectors": {"defaultRequire": 1}
 }

@@ -81,6 +81,45 @@ states and missing native injection evidence cannot establish absence or causati
 controls execute actual compiled handlers in an inert ABI-stub realm, not Minecraft; native
 injection composition and the unchanged41-test run remain the separately serialized gate.
 
+### Source-native pre-clear TICKING readiness candidate
+
+The retained `rail-producer-16` diagnostic completed all41 tests but failed the unchanged
+strict warning audit. Two of its eight captured transitions match later warnings: campfire→AIR
+at `(246,-47,36)` and spawner→AIR at `(5,4,181)`, both original `clearBlock` stacks with
+pending DUMMY. Six other captures were unbound ProtoChunk structure-marker changes, and six
+candidate attempts were dropped; this is **not** identification of all four warning producers.
+Pinned native ABI shows `LevelChunk.getBlockEntity` can return a live BE without removing its
+pending tag, unlike ProtoChunk removal of both maps. The existing per-block pre-materializer
+therefore does not establish completion of native `postProcessGeneration`, which clears the
+pending Map after its natural shape-update/materialization loop.
+
+`ClearReadinessMixin` is a separate **SOURCE-native fixture candidate**, before the original
+`clearSpaceForStructure`, enabled only by the native RunConfig's `readiness=ticking-v1` and
+actual `GameTestServer`. It derives the exact native inclusive inflation (X−2/+3, Y−3/+20,
+Z−3/+3), capped at64 intersecting chunks. The original 5×5 forcing calls remain untouched;
+only missing footprint chunks receive additional native forcing. Those extra tickets are
+journaled before admission and released through the original API in a finally-balanced lease,
+including partial admission/original-clear failures; existing forced tickets are not removed.
+Cleanup failures stay loud, with the original failure primary and cleanup suppressed.
+
+The actual cache distance-manager update propagates tickets and invokes holder `updateFutures`
+before selecting each actual BLOCK_TICKING future. It then pumps **the cache's actual**
+`BlockableEventLoop<Runnable>` (typed `ChunkMap.mainThreadExecutor`, not server `managedBlock`
+or a main-thread `join`). Initial completed Right/UNLOADED, exceptional/cancelled futures,
+wrong thread, unsupported/reentrant calls, stale holder/future/status or wrong chunk/world
+fail; there is no retry-until-green. Success requires every original native future's Left result,
+including the natural native postprocess/start-ticking continuation. No manual postprocess,
+manual preparation, pending purge, AIR guard, fake BE or log exemption is added.
+
+A single monotonic30s readiness budget starts before extra forcing; it is not reset per chunk.
+The wait predicate and between-operation checks are bounded. **Synchronous native FULL loading
+inside `setChunkForced`, or an individual native task, cannot be preempted by this predicate**;
+the outer bounded native runner remains necessary. This finite fixture preparation can change
+terrain loading, callback/RNG order and startup timing; it is not observationally neutral.
+Original clear arguments, geometry, floor, state operations, seed/defaults, observer budget8,
+41 tests and strict warning audit remain unchanged. Standalone policy/compiled-ABI/AP controls
+are not native injection or acceptance; one separately preregistered native run must qualify it.
+
 ## Opt-in nonshipping lifecycle witness (not acceptance)
 
 `rail_native_witness` defaults to exactly `false`. Only a separately admitted forensic

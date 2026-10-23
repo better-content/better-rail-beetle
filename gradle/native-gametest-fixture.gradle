@@ -22,6 +22,7 @@ def prepareNativeProperties = { File properties ->
 }
 // Scalar attempt identity only; no seed/default/world change. Non-native RunConfigs never receive it.
 nativeRun.property('bc.rail.nativeClear.token', configuredNativeDirectory().name)
+nativeRun.property('bc.rail.nativeClear.readiness', 'ticking-v1')
 def verifyNativeDiagnostics = { String text ->
     def severity = null
     def failures = []
@@ -86,7 +87,10 @@ tasks.matching { it.name == 'runGameTestServer' }.configureEach {
                 ['ClearPreparationMixin': 'net.minecraft.gametest.framework.StructureUtils',
                  'PromotionWarningMixin': 'net.minecraft.world.level.chunk.LevelChunk',
                  'ProducerPendingAccess': 'net.minecraft.world.level.chunk.ChunkAccess',
-                 'ProducerScopeMixin': 'net.minecraft.gametest.framework.StructureUtils'].each { mixin, target ->
+                 'ProducerScopeMixin': 'net.minecraft.gametest.framework.StructureUtils',
+                 'ClearReadinessMixin': 'net.minecraft.gametest.framework.StructureUtils',
+                 'ReadinessMapAccess': 'net.minecraft.server.level.ChunkMap',
+                 'ReadinessCacheAccess': 'net.minecraft.server.level.ServerChunkCache'].each { mixin, target ->
                     if (log.text.readLines().count { it.contains('Mixing ' + mixin +
                             ' from better_rail_beetle_native_clear.mixins.json into ' + target) } != 1)
                         throw new GradleException('Required native arena mixin was not observed exactly once: ' + mixin)
@@ -119,7 +123,9 @@ tasks.register('verifyNativeGameTestFixtureGuard') {
             if (run.allSources.count { it.name == 'nativeClear' } != (expected ? 1 : 0) ||
                     run.args.count { it == 'better_rail_beetle_native_clear.mixins.json' } != (expected ? 1 : 0) ||
                     (expected ? run.properties['bc.rail.nativeClear.token'] != configuredNativeDirectory().name :
-                            run.properties.containsKey('bc.rail.nativeClear.token')))
+                            run.properties.containsKey('bc.rail.nativeClear.token')) ||
+                    (expected ? run.properties['bc.rail.nativeClear.readiness'] != 'ticking-v1' :
+                            run.properties.containsKey('bc.rail.nativeClear.readiness')))
                 throw new GradleException('Native arena preparation escaped its GameTest-only RunConfig: ' + run.name)
         }
         def properties = layout.buildDirectory.file('native-fixture-guard/' + UUID.randomUUID() + '/server.properties').get().asFile
