@@ -25,6 +25,27 @@ population controls without Minecraft. This does not authorize the separate visu
 visual acceptance. Retain complete old builds, libraries, fixtures and evidence before
 any independently authorized clean/reset.
 
+### Bounded original-warning observer (not acceptance)
+
+The same native-only `nativeClear` source set observes ordinal zero of the pinned
+`LevelChunk.promotePendingBlockEntity(BlockPos, CompoundTag)`
+`Logger.warn(String, Object, Object)` calls: the original DUMMY warning, not an inferred
+precondition. It forwards the original receiver and arguments once **before** observation,
+including when the logger throws; observer failures cannot replace that original exception.
+It buffers at most four incident records using only supplied position and tag scalar
+`id/x/y/z/keepPacked` arguments plus up to 24 actual `StackTraceElement`s per incident.
+Stack truncation, capture failures and budget-dropped incidents remain explicit. No added
+world/state/chunk/RNG query, pending mutation, loop logging or I/O is performed. Helpers
+live outside the transformer's reserved `.mixin` package.
+
+One independent `BC_RAIL_PROMOTION_WARNING_WITNESS` INFO marker flushes only at
+`ServerStoppedEvent`, after setup/test loops, binding the fresh RunConfig UUID and optional
+existing lifecycle-witness token. It does not filter, replace or excuse the original WARN;
+strict diagnostics still fail. A missing shutdown marker is missing evidence, not a pass.
+Pure compiled-hook checks pin the actual target ABI/ordinals and unchanged forwarding,
+exception identity, privacy, budget and nonshipping exclusions, with negative controls.
+They do not establish actual native Mixin application or identify an unseen historical caller.
+
 ## Opt-in nonshipping lifecycle witness (not acceptance)
 
 `rail_native_witness` defaults to exactly `false`. Only a separately admitted forensic

@@ -20,6 +20,8 @@ def prepareNativeProperties = { File properties ->
         properties.text = '# Fresh source GameTest fixture: native defaults, no overrides.\n'
     }
 }
+// Scalar attempt identity only; no seed/default/world change. Non-native RunConfigs never receive it.
+nativeRun.property('bc.rail.nativeClear.token', configuredNativeDirectory().name)
 def verifyNativeDiagnostics = { String text ->
     def severity = null
     def failures = []
@@ -74,9 +76,17 @@ tasks.matching { it.name == 'runGameTestServer' }.configureEach {
             if (!log.isFile() || log.length() == 0) throw new GradleException('Missing actual native log: ' + log)
             verifyNativeDiagnostics(log.text)
             verifyNativeCompletion(log.text, expectedNativeTests)
-            if (name == 'debug.log' && log.text.readLines().count { it.contains(
-                    'Mixing ClearPreparationMixin from better_rail_beetle_native_clear.mixins.json into net.minecraft.gametest.framework.StructureUtils') } != 1)
-                throw new GradleException('Required native arena preparation mixin was not observed exactly once')
+            if (log.text.readLines().count { it.contains('BC_RAIL_PROMOTION_WARNING_WITNESS attempt=' +
+                    configuredNativeDirectory().name + ' ') } != 1)
+                throw new GradleException('Missing/duplicate bound shutdown-only native warning witness')
+            if (name == 'debug.log') {
+                ['ClearPreparationMixin': 'net.minecraft.gametest.framework.StructureUtils',
+                 'PromotionWarningMixin': 'net.minecraft.world.level.chunk.LevelChunk'].each { mixin, target ->
+                    if (log.text.readLines().count { it.contains('Mixing ' + mixin +
+                            ' from better_rail_beetle_native_clear.mixins.json into ' + target) } != 1)
+                        throw new GradleException('Required native arena mixin was not observed exactly once: ' + mixin)
+                }
+            }
             if (log.text.readLines().count { it.contains('BC_PLAYTEST') && it.contains('mod=' + project.property('mod_id') + ' event=logging.status') } != 1)
                 throw new GradleException('Missing/duplicate own structured native startup status: ' + log)
         }
@@ -98,7 +108,9 @@ tasks.register('verifyNativeGameTestFixtureGuard') {
         minecraft.runs.each { run ->
             boolean expected = run.name == 'gameTestServer'
             if (run.allSources.count { it.name == 'nativeClear' } != (expected ? 1 : 0) ||
-                    run.args.count { it == 'better_rail_beetle_native_clear.mixins.json' } != (expected ? 1 : 0))
+                    run.args.count { it == 'better_rail_beetle_native_clear.mixins.json' } != (expected ? 1 : 0) ||
+                    (expected ? run.properties['bc.rail.nativeClear.token'] != configuredNativeDirectory().name :
+                            run.properties.containsKey('bc.rail.nativeClear.token')))
                 throw new GradleException('Native arena preparation escaped its GameTest-only RunConfig: ' + run.name)
         }
         def properties = layout.buildDirectory.file('native-fixture-guard/' + UUID.randomUUID() + '/server.properties').get().asFile

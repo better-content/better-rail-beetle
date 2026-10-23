@@ -1,4 +1,6 @@
-package com.bettercontent.betterrailbeetle.nativeclear;
+package com.bettercontent.betterrailbeetle.nativeclear.mixin;
+
+import com.bettercontent.betterrailbeetle.nativeclear.ClearPreparation;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.StructureUtils;
