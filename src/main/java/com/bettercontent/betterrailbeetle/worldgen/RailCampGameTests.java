@@ -155,7 +155,7 @@ public final class RailCampGameTests {
         // No read/materialization between installing the DUMMY and the real native clear.
         BlockPos lazy = origin.above(2);
         level.setBlock(lazy, Blocks.CHEST.defaultBlockState(), 2);
-        var chunk = level.getChunk(lazy);
+        var chunk = level.getChunkAt(lazy);
         chunk.removeBlockEntity(lazy);
         var pending = new net.minecraft.nbt.CompoundTag();
         pending.putString("id", "DUMMY");
