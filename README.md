@@ -46,6 +46,41 @@ Pure compiled-hook checks pin the actual target ABI/ordinals and unchanged forwa
 exception identity, privacy, budget and nonshipping exclusions, with negative controls.
 They do not establish actual native Mixin application or identify an unseen historical caller.
 
+### Bounded source-native producer witness (observation only)
+
+The native-only source set also binds the original `StructureUtils.forceLoadChunks` and
+`clearSpaceForStructure` arguments with exact-once MixinExtras 0.5.4 `WrapMethod` scopes,
+balanced in `finally`. Scope records contain only original coordinates/bounds/floor,
+thread/sequence/parent/depth and identity hashes (hashes can collide; no world/argument object
+is retained). Caps are 256 scopes and depth16; overflow, unbound/cross-thread records and
+dangling/imbalanced scopes are explicit, never inferred association.
+
+Typed redirects in **both** `LevelChunk.setBlockState` and `ProtoChunk.setBlockState` forward
+the exact original section receiver, primitive coordinates and requested state once, first,
+return the actual old state, and leave original exceptions untouched. Observation only then
+uses an exact typed accessor to the inherited pending Map and its supplied-position lookup.
+Only changed-state calls with a currently present DUMMY tag are eligible. No terrain/state/chunk
+read, block-entity load/factory, RNG, pending mutation or runtime reflection is added.
+
+Before native level loading, startup selects all Minecraft blocks plus all `EntityBlock`
+blocks **before** enumerating their full-property states. The immutable identity dictionary
+is capped at131072 entries; schema and full enumerated-palette SHA256 digests bind it.
+Unknown actual states or a truncated dictionary mark observation incomplete. Eight retained
+candidate attempts at most capture original position, dictionary state descriptions, typed
+`id/x/y/z/keepPacked`, up to32 tag key/type names (not payload values) and24 stack frames.
+Metadata failures, unknowns, budget drops and truncated stacks remain explicit. The ordinary
+noncandidate mutation path has no added allocations; the first bounded anomaly captures do
+allocate metadata/stack records, and outer setup `WrapMethod` forwarding allocates varargs.
+This is diagnostic perturbation, not a zero-allocation or performance-acceptance claim.
+
+One separate nonce-bound `BC_RAIL_PRODUCER_WITNESS` INFO summary flushes only at
+`ServerStoppedEvent`. The existing original-warning observer and fatal native log audit remain
+unchanged. Completeness describes only the declared hook/selection scope: direct section
+bypasses, producers earlier than observation, calls without a returned old state, unselected
+states and missing native injection evidence cannot establish absence or causation. Pure JDK
+controls execute actual compiled handlers in an inert ABI-stub realm, not Minecraft; native
+injection composition and the unchanged41-test run remain the separately serialized gate.
+
 ## Opt-in nonshipping lifecycle witness (not acceptance)
 
 `rail_native_witness` defaults to exactly `false`. Only a separately admitted forensic
