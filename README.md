@@ -186,11 +186,7 @@ Standalone remains native INFO; pack profile chooses scoped DEBUG/`bc.playtest.l
 No route dumps, inventory/NBT, names, payloads, extra terrain probes or RNG draws are added.
 Common six-case and work/rollback projection tests run alongside the existing native gates.
 
-## Scope and authority
-
-This repository owns its mod-specific behavior and authoring inputs. Read [local instructions](AGENTS.md)
-and the [shared documentation/policy index](../../better-content-modpack/docs/README.md).
-
+## Scope
 
 Rail Beetle is a server-authoritative Forge 1.20.1 mod. At the end of an
 existing railway, a Beetle surveys nearby cave floors once per second, presents
@@ -354,3 +350,8 @@ rbvisual remote Dev upgraded remote-upgraded
 baseline adds only the receiver required to open that screen. `upgraded` fills
 the engine and module slots, while `locked` puts the machinery bays into their
 in-use lock state.
+
+## Feature boundaries
+
+Optional Create 6.0.8 integration. This clean implementation has no compatibility or migration
+for earlier Rail Crawler implementations/artifacts.
