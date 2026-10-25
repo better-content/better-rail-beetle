@@ -34,6 +34,9 @@ public final class SidingGameTests {
         for (int along = -6; along <= 6; along++) for (int side = -1; side <= 1; side++) {
             BlockPos p = SidingPiece.position(origin, heading, along, side);
             level.setBlockAndUpdate(p.below(), Blocks.COBBLESTONE.defaultBlockState());
+            // This test authors a dry cave corridor, not a falling-gravel hazard.
+            // Seal the roof before clearing so native gravity ticks cannot refill it.
+            level.setBlockAndUpdate(p.above(3), Blocks.STONE.defaultBlockState());
             for (int h = 0; h < 3; h++) level.setBlockAndUpdate(p.above(h), Blocks.AIR.defaultBlockState());
         }
         var bounds = new net.minecraft.world.level.levelgen.structure.BoundingBox(origin.getX()-6, origin.getY()-3, origin.getZ()-6, origin.getX()+6, origin.getY()+3, origin.getZ()+6);
@@ -48,6 +51,11 @@ public final class SidingGameTests {
         BlockPos markerPos = SidingPiece.position(origin, heading, -5, 1).below();
         var marker = (SidingMarker) level.getBlockEntity(markerPos);
         helper.runAfterDelay(80, () -> {
+            for (int along = 2; along <= 6; along++) for (int side = -1; side <= 1; side++) {
+                BlockPos p = SidingPiece.position(origin, heading, along, side);
+                for (int h = 0; h < 3; h++) helper.assertTrue(level.getBlockState(p.above(h)).isAir(),
+                        "Authored departure corridor must stay clear through native gravity ticks: " + p.above(h));
+            }
             helper.assertTrue(marker.complete(), "Siding must initialize and couple exactly once");
             var beetle = (RailBeetleEntity) level.getEntity(marker.vehicleId(level, 0));
             var passenger = (AbstractMinecart) level.getEntity(marker.vehicleId(level, 1));
