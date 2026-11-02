@@ -1,6 +1,7 @@
 package com.bettercontent.betterrailbeetle.item;
 
 import com.bettercontent.betterrailbeetle.upgrade.EngineKind;
+import com.bettercontent.betterrailbeetle.upgrade.ManufacturedRatings;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;
@@ -30,6 +31,9 @@ public final class EngineItem extends Item {
     @Override
     public void appendHoverText(ItemStack stack, @Nullable Level level, List<Component> tooltip, TooltipFlag flag) {
         tooltip.add(Component.translatable("tooltip.better_rail_beetle.engine.source", kind.requiredMod()).withStyle(ChatFormatting.DARK_GRAY));
+        if (stack.getTag() != null && stack.getTag().contains("better_manufacturing:settings", net.minecraft.nbt.Tag.TAG_COMPOUND))
+            tooltip.add(Component.literal("drive performance: " + String.format(java.util.Locale.ROOT, "%.2f",
+                    ManufacturedRatings.read(stack, "drive_performance")) + "x").withStyle(ChatFormatting.AQUA));
         tooltip.add(Component.translatable("tooltip.better_rail_beetle.engine.stored", resource(stack), kind.capacity(), kind.unit()).withStyle(ChatFormatting.GOLD));
         if (kind == EngineKind.STEAM) {
             tooltip.add(Component.translatable("tooltip.better_rail_beetle.engine.water",

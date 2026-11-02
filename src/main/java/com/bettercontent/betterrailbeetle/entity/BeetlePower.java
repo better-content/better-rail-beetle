@@ -29,8 +29,18 @@ final class BeetlePower {
     private BeetlePower() {}
 
     static int adjustedWork(WorkAction action, int rawWork, BeetleProfile profile, EngineKind engine) {
+        return adjustedWork(action, rawWork, profile, engine, 1);
+    }
+
+    static int adjustedWork(WorkAction action, int rawWork, BeetleProfile profile, EngineKind engine, double recoveryRating) {
         if (rawWork <= 0) return 0;
-        double work = Math.max(0, rawWork) * profile.efficiencyMultiplier();
+        // Keep the native grade-I/II work budgets (.70/.40) distinct. Baked quality
+        // tunes the fitted grade once, rather than adding a second tier bonus.
+        double safeRating = Double.isFinite(recoveryRating) && recoveryRating >= .75 && recoveryRating <= 1.5
+                ? recoveryRating : 1;
+        double efficiency = profile.recuperatorTier() == 0 ? 1
+                : Math.max(.25, Math.min(1, profile.efficiencyMultiplier() / safeRating));
+        double work = Math.max(0, rawWork) * efficiency;
         if (engine == EngineKind.SOURCE && action == WorkAction.SURVEY) work *= 0.70;
         if (engine == EngineKind.SOUL) work *= 0.70;
         if (engine == EngineKind.SPIRIT && (action == WorkAction.RAIL_PLACEMENT

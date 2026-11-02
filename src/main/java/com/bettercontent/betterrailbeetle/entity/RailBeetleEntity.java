@@ -25,6 +25,7 @@ import com.bettercontent.betterrailbeetle.upgrade.BeetleProfile;
 import com.bettercontent.betterrailbeetle.upgrade.EngineKind;
 import com.bettercontent.betterrailbeetle.upgrade.ModuleFamily;
 import com.bettercontent.betterrailbeetle.upgrade.ModuleKind;
+import com.bettercontent.betterrailbeetle.upgrade.ManufacturedRatings;
 import com.bettercontent.betterrailbeetle.upgrade.WorkAction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -115,6 +116,8 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
     private static final EntityDataAccessor<Integer> DATA_ENGINE = SynchedEntityData.defineId(RailBeetleEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> DATA_ENGINE_RESOURCE = SynchedEntityData.defineId(RailBeetleEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Long> DATA_MODULES = SynchedEntityData.defineId(RailBeetleEntity.class, EntityDataSerializers.LONG);
+    private static final EntityDataAccessor<CompoundTag> DATA_RATINGS = SynchedEntityData.defineId(RailBeetleEntity.class, EntityDataSerializers.COMPOUND_TAG);
+    private static final EntityDataAccessor<CompoundTag> DATA_CHASSIS = SynchedEntityData.defineId(RailBeetleEntity.class, EntityDataSerializers.COMPOUND_TAG);
     private static final EntityDataAccessor<Boolean> DATA_SEARCHLIGHT = SynchedEntityData.defineId(RailBeetleEntity.class, EntityDataSerializers.BOOLEAN);
 
     private final ItemStackHandler inventory = new ItemStackHandler(INVENTORY_SIZE) {
@@ -181,6 +184,7 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
     private double commandedHorizontalSpeed;
     private boolean clearedLivingBlocker;
     private boolean inventoryDropped;
+    @Nullable private CompoundTag chassisSettings;
 
     public RailBeetleEntity(EntityType<? extends RailBeetleEntity> type, Level level) {
         super(type, level);
@@ -202,12 +206,87 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
         entityData.define(DATA_ENGINE, EngineKind.FIREBOX.ordinal());
         entityData.define(DATA_ENGINE_RESOURCE, 0);
         entityData.define(DATA_MODULES, 0L);
+        entityData.define(DATA_RATINGS, new CompoundTag());
+        entityData.define(DATA_CHASSIS, new CompoundTag());
         entityData.define(DATA_SEARCHLIGHT, false);
     }
 
     public ItemStackHandler inventory() { return inventory; }
     public ItemStackHandler engineInventory() { return engine; }
     public ItemStackHandler moduleInventory() { return modules; }
+
+    /** Only bounded baked settings survive placement; no original parts are retained. */
+    public void setChassisSettings(ItemStack stack) {
+        CompoundTag settings = stack.getTag() == null ? null : stack.getTag().getCompound("better_manufacturing:settings");
+        chassisSettings = ManufacturedRatings.validChassis(settings) ? settings.copy() : null;
+        if (!level().isClientSide) syncStatus();
+    }
+
+    private ItemStack chassisItem() {
+        ItemStack result = new ItemStack(RailBeetleRegistries.RAIL_BEETLE_ITEM.get());
+        CompoundTag baked = level().isClientSide ? entityData.get(DATA_CHASSIS) : chassisSettings;
+        if (baked != null && !baked.isEmpty()) result.getOrCreateTag().put("better_manufacturing:settings", baked.copy());
+        return result;
+    }
+
+    private double moduleRating(ModuleFamily family, String property) {
+        if (level().isClientSide) {
+            double value = entityData.get(DATA_RATINGS).getDouble(property);
+            return Double.isFinite(value) && value >= .75 && value <= 1.5 ? value : 1;
+        }
+        for (int slot = 0; slot < modules.getSlots(); slot++) {
+            ItemStack stack = modules.getStackInSlot(slot);
+            if (stack.getItem() instanceof ModuleItem item && item.kind().family() == family)
+                return ManufacturedRatings.read(stack, property);
+        }
+        return 1;
+    }
+
+    private double driveRating() {
+        if (level().isClientSide) {
+            double value = entityData.get(DATA_RATINGS).getDouble("drive_performance");
+            return Double.isFinite(value) && value >= .75 && value <= 1.5 ? value : 1;
+        }
+        double chassis = chassisSettings == null ? 1 : ManufacturedRatings.read(chassisSettings,
+                "better_rail_beetle:better_rail_beetle", "drive_performance");
+        ItemStack drive = engine.getStackInSlot(0);
+        double motor = drive.isEmpty() ? 1 : ManufacturedRatings.read(drive, "drive_performance");
+        return Math.max(.75, Math.min(1.5, Math.sqrt(chassis * motor)));
+    }
+
+    private double maximumSpeed() {
+        // Native grade ceilings remain 4/8/12; a baked rating may tune a fitted governor
+        // but cannot silently turn its second grade into the first grade's base speed.
+        return profile().governorTier() == 0 ? 4 : Math.min(12,
+                profile().maxBlocksPerSecond() * moduleRating(ModuleFamily.GOVERNOR, "speed_limit") * driveRating());
+    }
+
+    private double torque() {
+        return profile().torqueTier() == 0 ? driveRating() : Math.min(3,
+                profile().torqueMultiplier() * moduleRating(ModuleFamily.TORQUE, "torque_transfer") * driveRating());
+    }
+
+    private int trailingLimit() {
+        return profile().drawgearTier() == 0 ? 2 : Math.min(12,
+                Math.max(2, (int) Math.floor(profile().trailingCartLimit() * moduleRating(ModuleFamily.DRAWGEAR, "towing_limit"))));
+    }
+
+    private double adhesion(boolean solo) {
+        return solo ? 1 : profile().adhesionTier() == 0 ? .5
+                : Math.min(1, profile().uphillSpeedMultiplier(false) * moduleRating(ModuleFamily.ADHESION, "adhesion_delivery"));
+    }
+
+    private int trestleWidth() {
+        int tier = profile().trestleTier();
+        return tier == 0 ? 1 : Math.min(12, Math.max(1,
+                (int) Math.floor(profile().bridgeWidth() * moduleRating(ModuleFamily.TRESTLE, "work_rate"))));
+    }
+
+    private int trestleDepth() {
+        int tier = profile().trestleTier();
+        return tier == 0 ? 4 : Math.min(32, Math.max(4,
+                (int) Math.floor(profile().supportDepth() * moduleRating(ModuleFamily.TRESTLE, "work_rate"))));
+    }
 
     public BeetleProfile profile() {
         if (level().isClientSide) {
@@ -355,8 +434,8 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
             default -> false;
         };
         if (commanded) {
-            int trailers = CreateCompat.countTrailingCarts(this, profile().trailingCartLimit() + 1);
-            if (trailers > profile().trailingCartLimit()) {
+            int trailers = CreateCompat.countTrailingCarts(this, trailingLimit() + 1);
+            if (trailers > trailingLimit()) {
                 pause();
                 setDeltaMovement(Vec3.ZERO);
                 notifyTrackingPlayers("message.better_rail_beetle.overloaded");
@@ -470,7 +549,7 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
             int configured = RailBeetleConfig.ROUTE_RAIL_CAP.get();
             int routeCap = Math.min(configured, profile().routeCap());
             planningSession = TerrainRoutePlanner.begin(level(), rail, noseHeading, routeCap,
-                    proposalGeneration + 1, profile().supportDepth(), profile().bridgeWidth());
+                    proposalGeneration + 1, trestleDepth(), trestleWidth());
         }
         // Surveying must draw power, but baseline route discovery should remain cheap enough
         // that a single piece of coal can comfortably cover a full 64-block search.
@@ -570,26 +649,26 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
         Vec3 motion = getDeltaMovement();
         Vec3 tangent = new Vec3(direction.getStepX(), 0, direction.getStepZ());
         double along = motion.x * tangent.x + motion.z * tangent.z;
-        int trailers = CreateCompat.countTrailingCarts(this, profile().trailingCartLimit() + 1);
-        if (uphill) targetSpeed *= profile().uphillSpeedMultiplier(trailers == 0);
+        int trailers = CreateCompat.countTrailingCarts(this, trailingLimit() + 1);
+        if (uphill) targetSpeed *= adhesion(trailers == 0);
         double difference = targetSpeed - along;
-        double traction = ACCELERATION * profile().torqueMultiplier();
+        double traction = ACCELERATION * torque();
         if (engineKind() == EngineKind.FLUX && (trailers > 0 || targetSpeed > 4.0 / 20.0)) traction *= 1.30;
         double limit = difference >= 0 ? traction + (uphill ? getSlopeAdjustment() : 0)
                 : serviceDeceleration();
         double change = Mth.clamp(difference, -limit, limit);
         double perpendicularX = motion.x - tangent.x * along;
         double perpendicularZ = motion.z - tangent.z * along;
-        setCurrentCartSpeedCapOnRail((float) (profile().maxBlocksPerSecond() / 20.0));
+        setCurrentCartSpeedCapOnRail((float) (maximumSpeed() / 20.0));
         setDeltaMovement(tangent.x * (along + change) + perpendicularX * 0.5,
                 motion.y, tangent.z * (along + change) + perpendicularZ * 0.5);
         CreateCompat.applyConsistTraction(this, direction, targetSpeed, traction,
-                profile().trailingCartLimit());
+                trailingLimit());
         return Math.abs(along + change) > 1.0e-4;
     }
 
     private double stoppingSpeed(double distance) {
-        return Math.min(profile().maxBlocksPerSecond() / 20.0,
+        return Math.min(maximumSpeed() / 20.0,
                 Math.sqrt(Math.max(0, 2.0 * serviceDeceleration() * distance)));
     }
 
@@ -599,22 +678,26 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
     }
 
     private double selectedSpeed() {
-        return Math.min(speedTier.blocksPerTick(), profile().maxBlocksPerSecond() / 20.0);
+        return Math.min(speedTier.blocksPerTick(), maximumSpeed() / 20.0);
     }
 
     private int motionWork() {
         double blocksPerSecond = Math.max(0.5, selectedSpeed() * 20.0);
         double factor = Math.pow(blocksPerSecond / 4.0, 2.0);
-        int trailers = CreateCompat.countTrailingCarts(this, profile().trailingCartLimit() + 1);
+        int trailers = CreateCompat.countTrailingCarts(this, trailingLimit() + 1);
         double penalty = 0.15 * trailers + (commandedUphill ? 0.50 : 0.0);
         if (engineKind() == EngineKind.STEAM) penalty *= 0.70;
         factor *= 1.0 + penalty;
         if (engineKind() == EngineKind.LIFEFORCE && blocksPerSecond > 4.0) factor *= 0.70;
+        // Governor speed already raises work quadratically. Charge the actual bounded
+        // traction improvement, not an unusable rating above a native grade's torque cap.
+        factor *= torque() / profile().torqueMultiplier();
         return Math.max(1, (int) Math.ceil(factor));
     }
 
     private double serviceDeceleration() {
-        double value = profile().serviceDeceleration();
+        double value = profile().brakeTier() == 0 ? .02 : Math.min(.08,
+                profile().serviceDeceleration() * moduleRating(ModuleFamily.BRAKES, "deceleration"));
         return engineKind() == EngineKind.PRESSURE ? value * 1.30 : value;
     }
 
@@ -692,7 +775,8 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
     private boolean consumeWork(WorkAction action, int rawWork) {
         if (rawWork <= 0) return true;
         EngineKind kind = engineKind();
-        int work = BeetlePower.adjustedWork(action, rawWork, profile(), kind);
+        int work = BeetlePower.adjustedWork(action, rawWork, profile(), kind,
+                moduleRating(ModuleFamily.RECUPERATOR, "recovery"));
         ItemStack engineStack = engine.getStackInSlot(0);
         if (!engineStack.isEmpty()) {
             if (!BeetlePower.consumeEngine(engineStack, inventory, work)) return false;
@@ -1051,7 +1135,7 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
         if (brake) {
             setDeltaMovement(Vec3.ZERO);
             setCurrentCartSpeedCapOnRail(0);
-        } else setCurrentCartSpeedCapOnRail((float) (profile().maxBlocksPerSecond() / 20.0));
+        } else setCurrentCartSpeedCapOnRail((float) (maximumSpeed() / 20.0));
         CreateCompat.setExternallyStalled(this, brake);
         automaticBrakeApplied = brake;
     }
@@ -1316,6 +1400,18 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
         entityData.set(DATA_ENGINE, engineKind().ordinal());
         entityData.set(DATA_ENGINE_RESOURCE, engineResource());
         entityData.set(DATA_MODULES, moduleMask());
+        CompoundTag ratings = new CompoundTag();
+        ratings.putDouble("speed_limit", moduleRating(ModuleFamily.GOVERNOR, "speed_limit"));
+        ratings.putDouble("recovery", moduleRating(ModuleFamily.RECUPERATOR, "recovery"));
+        ratings.putDouble("deceleration", moduleRating(ModuleFamily.BRAKES, "deceleration"));
+        ratings.putDouble("adhesion_delivery", moduleRating(ModuleFamily.ADHESION, "adhesion_delivery"));
+        ratings.putDouble("torque_transfer", moduleRating(ModuleFamily.TORQUE, "torque_transfer"));
+        ratings.putDouble("towing_limit", moduleRating(ModuleFamily.DRAWGEAR, "towing_limit"));
+        ratings.putDouble("work_rate", moduleRating(ModuleFamily.TRESTLE, "work_rate"));
+        ratings.putDouble("drive_performance", driveRating());
+        if (!ratings.equals(entityData.get(DATA_RATINGS))) entityData.set(DATA_RATINGS, ratings);
+        CompoundTag chassis = chassisSettings == null ? new CompoundTag() : chassisSettings.copy();
+        if (!chassis.equals(entityData.get(DATA_CHASSIS))) entityData.set(DATA_CHASSIS, chassis);
     }
 
     private void tickSearchlight() {
@@ -1452,12 +1548,18 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
     }
 
     @Override protected Item getDropItem() { return RailBeetleRegistries.RAIL_BEETLE_ITEM.get(); }
-    @Override public ItemStack getPickResult() { return new ItemStack(RailBeetleRegistries.RAIL_BEETLE_ITEM.get()); }
+    @Override public ItemStack getPickResult() { return chassisItem(); }
 
     @Override
     public void destroy(net.minecraft.world.damagesource.DamageSource source) {
         dropInventory();
-        super.destroy(source);
+        // Vanilla Minecart.destroy creates an untagged item; preserve this baked chassis.
+        kill();
+        if (level().getGameRules().getBoolean(net.minecraft.world.level.GameRules.RULE_DOENTITYDROPS)) {
+            ItemStack stack = chassisItem();
+            if (hasCustomName()) stack.setHoverName(getCustomName());
+            spawnAtLocation(stack);
+        }
     }
 
     private void dropInventory() {
@@ -1489,6 +1591,7 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
         tag.put("Inventory", inventory.serializeNBT());
         tag.put("Engine", engine.serializeNBT());
         tag.put("Modules", modules.serializeNBT());
+        if (chassisSettings != null) tag.put("ChassisSettings", chassisSettings.copy());
         tag.putBoolean("DiscoveryParked", discoveryParked);
         tag.putBoolean("ForcedBrake", forcedBrake);
         tag.putBoolean("Neutral", mode == BeetleMode.NEUTRAL);
@@ -1511,6 +1614,8 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
         inventory.deserializeNBT(tag.getCompound("Inventory"));
         engine.deserializeNBT(tag.getCompound("Engine"));
         modules.deserializeNBT(tag.getCompound("Modules"));
+        CompoundTag savedChassis = tag.getCompound("ChassisSettings");
+        chassisSettings = ManufacturedRatings.validChassis(savedChassis) ? savedChassis.copy() : null;
         discoveryParked = tag.getBoolean("DiscoveryParked");
         forcedBrake = tag.getBoolean("ForcedBrake");
         fuelTicks = Math.max(0, tag.getInt("FuelTicks"));
@@ -1537,6 +1642,7 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
         proposals = List.of();
         previousProposals = List.of();
         clearPlanning();
+        if (!level().isClientSide) syncStatus();
     }
 
     private static BeetleSpeed parseSpeed(String name) {
