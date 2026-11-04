@@ -5,3 +5,5 @@ out/
 .idea/
 *.iml
 *.log
+# Locally cached binaries; Packwiz metadata/hashes remain tracked separately.
+/gradle/wrapper/gradle-wrapper.jar
