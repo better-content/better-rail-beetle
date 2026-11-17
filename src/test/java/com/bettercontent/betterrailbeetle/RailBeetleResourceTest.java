@@ -1,5 +1,6 @@
 package com.bettercontent.betterrailbeetle;
 
+import com.google.gson.JsonParser;
 import com.bettercontent.betterrailbeetle.upgrade.EngineKind;
 import com.bettercontent.betterrailbeetle.upgrade.ModuleKind;
 import org.junit.jupiter.api.Test;
@@ -36,6 +37,32 @@ final class RailBeetleResourceTest {
             assertTrue(lang.contains("\"item.better_rail_beetle." + kind.id() + "\""));
             assertTrue(lang.contains("\"tooltip.better_rail_beetle.module." + kind.id() + "\""));
         }
+    }
+
+    @Test void craftableEntryPointsRetainTheirActualIngredientRoots() throws IOException {
+        var beetle = JsonParser.parseString(resource("/data/better_rail_beetle/recipes/better_rail_beetle.json"))
+                .getAsJsonObject();
+        assertEquals("minecraft:crafting_shaped", beetle.get("type").getAsString());
+        assertEquals("better_rail_beetle:better_rail_beetle",
+                beetle.getAsJsonObject("result").get("item").getAsString());
+        assertEquals("[\" C \",\"RFR\",\" M \"]", beetle.getAsJsonArray("pattern").toString());
+        var beetleKey = beetle.getAsJsonObject("key");
+        assertEquals("minecraft:compass", beetleKey.getAsJsonObject("C").get("item").getAsString());
+        assertEquals("minecraft:rail", beetleKey.getAsJsonObject("R").get("item").getAsString());
+        assertEquals("minecraft:furnace", beetleKey.getAsJsonObject("F").get("item").getAsString());
+        assertEquals("minecraft:minecart", beetleKey.getAsJsonObject("M").get("item").getAsString());
+
+        var beacon = JsonParser.parseString(resource("/data/better_rail_beetle/recipes/route_beacon.json"))
+                .getAsJsonObject();
+        assertEquals("minecraft:crafting_shaped", beacon.get("type").getAsString());
+        assertEquals("better_rail_beetle:route_beacon",
+                beacon.getAsJsonObject("result").get("item").getAsString());
+        assertEquals("[\" C \",\"IRI\",\" P \"]", beacon.getAsJsonArray("pattern").toString());
+        var beaconKey = beacon.getAsJsonObject("key");
+        assertEquals("minecraft:compass", beaconKey.getAsJsonObject("C").get("item").getAsString());
+        assertEquals("minecraft:copper_ingot", beaconKey.getAsJsonObject("I").get("item").getAsString());
+        assertEquals("minecraft:redstone_torch", beaconKey.getAsJsonObject("R").get("item").getAsString());
+        assertEquals("minecraft:planks", beaconKey.getAsJsonObject("P").get("tag").getAsString());
     }
 
     @Test void allPowerProvidersRemainOptional() throws IOException {
