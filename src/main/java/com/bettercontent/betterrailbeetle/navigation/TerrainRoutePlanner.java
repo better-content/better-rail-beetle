@@ -11,6 +11,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseRailBlock;
+import net.minecraft.world.level.block.SlabBlock;
+import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.RailShape;
 
@@ -332,7 +334,7 @@ public final class TerrainRoutePlanner {
                 boolean turn = current.incoming.getAxis() != direction.getAxis();
                 boolean hasTurn = current.hasTurn || turn;
                 int straight = turn ? 0 : current.hasTurn ? Math.min(2, current.straightSinceTurn + 1) : 0;
-                int bridgeRun = placement.supportPositions.isEmpty() ? 0 : current.bridgeRun + 1;
+                int bridgeRun = placement.bridge ? current.bridgeRun + 1 : 0;
                 result.add(new Candidate(next, direction, current, placement.supportPositions, bridgeRun,
                         hasTurn, straight, new Key(next, direction, bridgeRun, hasTurn, straight)));
             }
@@ -353,19 +355,18 @@ public final class TerrainRoutePlanner {
 
     private static boolean bridgeAllowed(Node current, Direction direction, int dy,
                                          Placement placement, int bridgeWidth) {
-        boolean supported = !placement.supportPositions.isEmpty();
         if (current.bridgeRun > 0) {
             if (direction != current.incoming || dy != 0) return false;
-            return !supported || current.bridgeRun < bridgeWidth;
+            return !placement.bridge || current.bridgeRun < bridgeWidth;
         }
-        return !supported || (direction == current.incoming && dy == 0 && bridgeWidth > 0);
+        return !placement.bridge || (direction == current.incoming && dy == 0 && bridgeWidth > 0);
     }
 
     private static boolean levelBridgeRequired(TerrainMesh mesh, BlockPos current, Direction direction) {
         Placement bridge = mesh.placement(current.relative(direction));
         Placement landing = mesh.placement(current.relative(direction, 2));
-        return bridge != null && !bridge.supportPositions.isEmpty()
-                && landing != null && landing.supportPositions.isEmpty();
+        return bridge != null && bridge.bridge
+                && landing != null && !landing.bridge;
     }
 
     private static boolean adjacencyAllowed(TerrainMesh mesh, Node current, BlockPos candidate) {
@@ -569,8 +570,9 @@ public final class TerrainRoutePlanner {
             }
             BlockPos next = index + 1 < steps.size() ? steps.get(index + 1).railPos() : null;
             if (!step.supportPositions().isEmpty()) {
-                if (dy != 0 || next == null || next.getY() != current.getY()
-                        || horizontalDirection(current, next) != outgoing) return false;
+                if (step.supportPositions().size() > 1
+                        && (dy != 0 || next == null || next.getY() != current.getY()
+                        || horizontalDirection(current, next) != outgoing)) return false;
                 BlockPos expected = current.below(step.supportPositions().size());
                 for (BlockPos support : step.supportPositions()) {
                     if (!support.equals(expected)) return false;
@@ -594,6 +596,15 @@ public final class TerrainRoutePlanner {
         Placement placement = inspectPlacement(level, step.railPos(), 32);
         if (placement == null || !placement.supportPositions.equals(step.supportPositions())) {
             return false;
+        }
+        if (placement.bridge) {
+            BlockPos predecessor = stepIndex == 0 ? proposal.origin() : proposal.steps().get(stepIndex - 1).railPos();
+            BlockPos next = stepIndex + 1 < proposal.steps().size()
+                    ? proposal.steps().get(stepIndex + 1).railPos() : null;
+            if (step.railPos().getY() != predecessor.getY() || next == null
+                    || next.getY() != step.railPos().getY()
+                    || horizontalDirection(predecessor, step.railPos()) != horizontalDirection(step.railPos(), next))
+                return false;
         }
         BlockPos predecessor = stepIndex == 0
                 ? proposal.origin()
@@ -655,7 +666,10 @@ public final class TerrainRoutePlanner {
         if (!floorState.getFluidState().isEmpty()) return null;
         if (floorState.isFaceSturdy(level, floor, Direction.UP)
                 && !(floorState.getBlock() instanceof BaseRailBlock)) {
-            return new Placement(List.of());
+            return new Placement(List.of(), false);
+        }
+        if (isReplaceablePartialFloor(floorState)) {
+            return new Placement(List.of(floor.immutable()), false);
         }
         List<BlockPos> topDown = new ArrayList<>();
         BlockPos cursor = floor;
@@ -666,7 +680,7 @@ public final class TerrainRoutePlanner {
                 if (!state.isFaceSturdy(level, cursor, Direction.UP)
                         || state.getBlock() instanceof BaseRailBlock) return null;
                 java.util.Collections.reverse(topDown);
-                return topDown.isEmpty() ? new Placement(List.of()) : new Placement(List.copyOf(topDown));
+                return topDown.isEmpty() ? new Placement(List.of(), false) : new Placement(List.copyOf(topDown), true);
             }
             topDown.add(cursor.immutable());
         }
@@ -677,8 +691,8 @@ public final class TerrainRoutePlanner {
         BlockPos bridge = current.relative(direction);
         Placement bridgePlacement = inspectPlacement(level, bridge, 32);
         Placement landingPlacement = inspectPlacement(level, bridge.relative(direction), 32);
-        return bridgePlacement != null && !bridgePlacement.supportPositions.isEmpty()
-                && landingPlacement != null && landingPlacement.supportPositions.isEmpty();
+        return bridgePlacement != null && bridgePlacement.bridge
+                && landingPlacement != null && !landingPlacement.bridge;
     }
 
     private static RailShape ascending(Direction direction) {
@@ -698,7 +712,12 @@ public final class TerrainRoutePlanner {
         return dz > 0 ? Direction.SOUTH : Direction.NORTH;
     }
 
-    private record Placement(List<BlockPos> supportPositions) {
+    public static boolean isReplaceablePartialFloor(BlockState state) {
+        return (state.getBlock() instanceof SlabBlock || state.getBlock() instanceof StairBlock)
+                && state.getFluidState().isEmpty() && !state.hasBlockEntity();
+    }
+
+    private record Placement(List<BlockPos> supportPositions, boolean bridge) {
         private Placement { supportPositions = List.copyOf(supportPositions); }
     }
     private record MeshPoint(BlockPos pos, int depth) {}

@@ -841,8 +841,12 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
             invalidateRoute();
             return false;
         }
+        Map<BlockPos, BlockState> replacedFloors = new HashMap<>();
         for (BlockPos support : step.supportPositions()) {
-            if (!clearRouteObstruction(support)) {
+            BlockState original = level().getBlockState(support);
+            if (TerrainRoutePlanner.isReplaceablePartialFloor(original)) {
+                replacedFloors.put(support.immutable(), original);
+            } else if (!clearRouteObstruction(support)) {
                 returnItem(new ItemStack(railItem));
                 supportItems.forEach(item -> returnItem(new ItemStack(item)));
                 invalidateRoute();
@@ -853,7 +857,7 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
         for (int index = 0; index < supportCount; index++) {
             if (!level().setBlock(step.supportPositions().get(index),
                     supportItems.get(index).getBlock().defaultBlockState(), 3)) {
-                rollbackPlacement(step, railItem, supportItems, placedSupports, null);
+                rollbackPlacement(step, railItem, supportItems, placedSupports, replacedFloors, null);
                 invalidateRoute();
                 return false;
             }
@@ -862,21 +866,25 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
         BaseRailBlock railBlock = (BaseRailBlock) railItem.getBlock();
         BlockState railState = railBlock.defaultBlockState().setValue(railBlock.getShapeProperty(), step.shape());
         if (!level().setBlock(step.railPos(), railState, 3)) {
-            rollbackPlacement(step, railItem, supportItems, placedSupports, null);
+            rollbackPlacement(step, railItem, supportItems, placedSupports, replacedFloors, null);
             invalidateRoute();
             return false;
         }
         int savedFuel = fuelTicks;
         CompoundTag savedEngine = engine.getStackInSlot(0).getTag() == null ? null : engine.getStackInSlot(0).getTag().copy();
         ItemStack[] savedCargo = snapshotInventory();
-        if (!consumeWork(WorkAction.SUPPORT_PLACEMENT, supportCount * 2)
+        if (!consumeWork(WorkAction.CLEARING, replacedFloors.size() * 4)
+                || !consumeWork(WorkAction.SUPPORT_PLACEMENT, supportCount * 2)
                 || !consumeWork(WorkAction.RAIL_PLACEMENT, 4)) {
             fuelTicks = savedFuel;
             engine.getStackInSlot(0).setTag(savedEngine == null ? null : savedEngine.copy());
             restoreInventory(savedCargo);
-            rollbackPlacement(step, railItem, supportItems, placedSupports, railState);
+            rollbackPlacement(step, railItem, supportItems, placedSupports, replacedFloors, railState);
             invalidateRoute();
             return false;
+        }
+        for (Map.Entry<BlockPos, BlockState> replaced : replacedFloors.entrySet()) {
+            Block.dropResources(replaced.getValue(), (ServerLevel) level(), replaced.getKey());
         }
         placedRouteRails.add(step.railPos().immutable());
         if (PlaytestDiagnostics.LOG.enabled("beetle")) { playtestPlacedRails++; playtestPlacedSupports += supportCount; }
@@ -891,7 +899,8 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
     }
 
     private void rollbackPlacement(RouteStep step, BlockItem railItem, List<BlockItem> supportItems,
-                                   List<BlockPos> placedSupports, BlockState railState) {
+                                   List<BlockPos> placedSupports, Map<BlockPos, BlockState> replacedFloors,
+                                   BlockState railState) {
         if (railState != null && level().getBlockState(step.railPos()).equals(railState))
             level().setBlock(step.railPos(), Blocks.AIR.defaultBlockState(), 3);
         for (BlockPos support : placedSupports) {
@@ -899,7 +908,7 @@ public final class RailBeetleEntity extends Minecart implements MenuProvider {
             // Only clear blocks still occupying the Beetle's placed support positions;
             // intervening edits are left intact.
             if (!authored.isAir() && supportItems.stream().anyMatch(item -> item.getBlock().defaultBlockState().is(authored.getBlock())))
-                level().setBlock(support, Blocks.AIR.defaultBlockState(), 3);
+                level().setBlock(support, replacedFloors.getOrDefault(support, Blocks.AIR.defaultBlockState()), 3);
         }
         returnItem(new ItemStack(railItem));
         supportItems.forEach(item -> returnItem(new ItemStack(item)));

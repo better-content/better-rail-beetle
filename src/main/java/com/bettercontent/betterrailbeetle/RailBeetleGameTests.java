@@ -866,6 +866,70 @@ public final class RailBeetleGameTests {
     }
 
     @GameTest(templateNamespace = RailBeetleMod.MOD_ID, template = TEMPLATE, timeoutTicks = 300)
+    public static void beetleReplacesConsecutivePartialFloorsWithSupports(GameTestHelper helper) {
+        BlockPos origin = helper.absolutePos(new BlockPos(4, 4, 4));
+        prepareSouthCorridor(helper, origin, 7);
+        BlockPos slabRail = origin.south(2);
+        BlockPos stairRail = origin.south(3);
+        BlockPos supportedSlabRail = origin.south(4);
+        var supportedSlab = Blocks.STONE_SLAB.defaultBlockState().setValue(
+                net.minecraft.world.level.block.SlabBlock.TYPE,
+                net.minecraft.world.level.block.state.properties.SlabType.TOP);
+        helper.getLevel().setBlockAndUpdate(slabRail.below(), Blocks.STONE_SLAB.defaultBlockState());
+        helper.getLevel().setBlockAndUpdate(stairRail.below(), Blocks.OAK_STAIRS.defaultBlockState());
+        helper.getLevel().setBlockAndUpdate(supportedSlabRail.below(), supportedSlab);
+
+        RailBeetleEntity beetle = RailBeetleRegistries.RAIL_BEETLE_ENTITY.get().create(helper.getLevel());
+        helper.assertTrue(beetle != null, "Beetle entity type must create");
+        beetle.setPos(origin.getX() + 0.5, origin.getY() + 0.0625, origin.getZ() + 0.5);
+        beetle.setInitialHeading(Direction.SOUTH);
+        beetle.inventory().setStackInSlot(0, new ItemStack(Blocks.RAIL, 16));
+        beetle.inventory().setStackInSlot(1, new ItemStack(net.minecraft.world.item.Items.COAL, 1));
+        helper.getLevel().addFreshEntity(beetle);
+        net.minecraft.world.entity.player.Player player = helper.makeMockPlayer();
+
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(!beetle.proposals().isEmpty(),
+                        "planner must reach partial-block corridor"))
+                .thenExecute(() -> {
+                    RouteProposal route = beetle.proposals().stream()
+                            .filter(proposal -> proposal.steps().stream().anyMatch(step -> step.railPos().equals(stairRail)))
+                            .findFirst().orElseThrow();
+                    helper.assertTrue(route.steps().stream().filter(step ->
+                            step.railPos().equals(slabRail) || step.railPos().equals(stairRail))
+                            .allMatch(step -> step.supportPositions().equals(List.of(step.railPos().below()))),
+                            "both adjacent partial floors must consume a support rather than bridge width");
+                    helper.assertTrue(route.steps().stream().filter(step -> step.railPos().equals(supportedSlabRail))
+                                    .allMatch(step -> step.supportPositions().isEmpty()),
+                            "a slab whose upper face supports rail must not be replaced");
+                    helper.assertTrue(BeetleSupplies.supplyStatus(beetle.inventory(), beetle.fuelTicks(), route.steps())
+                                    .missingSupports() >= 2,
+                            "route must report missing supports before construction");
+                    beetle.inventory().setStackInSlot(2, new ItemStack(Blocks.COBBLESTONE, 16));
+                    BlockPos first = route.steps().get(0).railPos();
+                    player.setPos(beetle.getX(), beetle.getY() + 1.0, beetle.getZ() - 2.0);
+                    player.lookAt(EntityAnchorArgument.Anchor.EYES,
+                            new net.minecraft.world.phys.Vec3(first.getX() + 0.5, first.getY() + 0.2, first.getZ() + 0.5));
+                    beetle.selectRoute(player, route.generation(), route.id());
+                    helper.assertTrue(beetle.mode() == BeetleMode.DEPARTING,
+                            "partial-floor route must depart with available supports");
+                })
+                .thenWaitUntil(() -> {
+                    for (BlockPos rail : List.of(slabRail, stairRail)) {
+                        helper.assertTrue(BaseRailBlock.isRail(helper.getLevel().getBlockState(rail)),
+                                "Beetle must lay rail over replaced partial block at " + rail);
+                        helper.assertTrue(helper.getLevel().getBlockState(rail.below()).is(Blocks.COBBLESTONE),
+                                "Beetle must replace partial block with a full support at " + rail.below());
+                    }
+                    helper.assertTrue(helper.getLevel().getBlockState(supportedSlabRail.below()).equals(supportedSlab),
+                            "already rail-supporting top slab must remain unchanged");
+                    helper.assertItemEntityPresent(net.minecraft.world.item.Items.STONE_SLAB,
+                            new BlockPos(4, 3, 6), 3.0);
+                })
+                .thenSucceed();
+    }
+
+    @GameTest(templateNamespace = RailBeetleMod.MOD_ID, template = TEMPLATE, timeoutTicks = 300)
     public static void beetleBuildsBottomUpTrestleOverDeepSingleColumnGap(GameTestHelper helper) {
         BlockPos origin = helper.absolutePos(new BlockPos(4, 4, 4));
         prepareSouthCorridor(helper, origin, 7);
@@ -1011,6 +1075,17 @@ public final class RailBeetleGameTests {
 
     @GameTest(templateNamespace = RailBeetleMod.MOD_ID, template = TEMPLATE, timeoutTicks = 160)
     public static void staleSoftRouteDoesNotBreakProtectedReplacement(GameTestHelper helper) {
+        helper.assertTrue(TerrainRoutePlanner.isReplaceablePartialFloor(Blocks.STONE_SLAB.defaultBlockState()),
+                "dry slabs may be replaced only when they cannot support a rail");
+        helper.assertTrue(TerrainRoutePlanner.isReplaceablePartialFloor(Blocks.OAK_STAIRS.defaultBlockState()),
+                "dry stairs may be replaced only when they cannot support a rail");
+        helper.assertTrue(!TerrainRoutePlanner.isReplaceablePartialFloor(Blocks.OAK_STAIRS.defaultBlockState()
+                        .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED, true)),
+                "waterlogged stairs must not be replaced");
+        helper.assertTrue(!TerrainRoutePlanner.isReplaceablePartialFloor(Blocks.STONE.defaultBlockState()),
+                "full blocks must remain protected");
+        helper.assertTrue(!TerrainRoutePlanner.isReplaceablePartialFloor(Blocks.CHEST.defaultBlockState()),
+                "block entities must remain protected");
         helper.assertTrue(!RouteObstructions.isClearable(Blocks.WHEAT.defaultBlockState()),
                 "crops must remain protected");
         helper.assertTrue(!RouteObstructions.isClearable(Blocks.OAK_LOG.defaultBlockState()),
